@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html data-ng-app="app">
+<head>
+    <title>Test</title>
+    <style type="text/css">
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0px;
+            padding: 0px;
+        }
+        .label { display: inline-block; width: 100px; }
+        .bar {display: block; width: 200px; border: 1px solid #000000; }
+        .bar .progress {
+            background: #369;
+            height: 16px;
+        }
+    </style>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/angular.js/1.2.15/angular.js"></script>
+    <script src="../build/ux-runner.js"></script>
+    <script>
+        angular.module('app', []).controller('progress', function ($scope) {
+            var dictionary = {};
+            ux.each(ux.runner.events, function (eventName) {
+                if (eventName === ux.runner.events.PROGRESS) {
+                    ux.runner.on(eventName, function (event, progresses) {
+                        $scope.items = progresses;
+                        ux.each(progresses, function (item) {
+                            if (!dictionary[item.uid]) {
+                                dictionary[item.uid] = item;
+                            }
+                            dictionary[item.uid].progress = item.progress;
+                            console.log("\t%c%s: %d%", "color:#090", item.uid, Math.round(item.progress * 100));
+                        });
+                        $scope.items.length = 0;
+                        ux.each(dictionary, function (item) {
+                            $scope.items.push(item);
+                        });
+                        $scope.$apply();
+                    });
+                } else {
+                    ux.runner.on(eventName, function (event) {
+                        console.log("EVENT %s:%s, %o", eventName, arguments[1].uid, ux.util.array.toArray(arguments));
+                    });
+                }
+            });
+            ux.runner.setSteps(
+                    [
+                        {
+                            label: '0',
+                            children: [
+                                {label: '0.0', children: [
+                                    {label: '0.0.0', type: ux.runner.types.FIND},
+                                    {label: '0.0.1'}
+                                ]},
+                                {label: '0.1', children: [
+                                    {label: '0.1.0'},
+                                    {label: '0.1.1'}
+                                ]},
+                                {label: '0.2', children: [
+                                    {label: '0.2.0'},
+                                    {label: '0.2.1'}
+                                ]},
+                            ]
+                        }
+                    ]);
+            setTimeout(ux.runner.start);//, 0, '0.1');//();//'0.1');
+        });
+    </script>
+</head>
+<body>
+<div data-ng-controller="progress">
+    <div data-ng-repeat="item in items" class="bar">
+        <div class="label">{{item.uid}}</div>
+        <div class="progress" style="width:{{item.progress*100}}%"></div>
+    </div>
+</div>
+</body>
+</html>
