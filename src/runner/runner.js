@@ -1,35 +1,39 @@
 function runner(api) {
     dispatcher(api);
-    var methods = new MethodAPI(api), // internal mapping of types to methods.
+    var rootPrefix = 'R',
+        methods = new MethodAPI(api), // internal mapping of types to methods.
         activePath = new Path(),
     //TODO: This needs to be passed in and run a default.
         options = {
             async: true
         },
         intv,
-        rootStep = step({uid:'R', label:'root', type:'root', index: -1});
+        rootStep = step({uid:rootPrefix, label:'root', type:'root', index: -1, maxTime: 100});
 
     function getSteps() {
         return rootStep.children;
     }
 
     function setSteps(steps) {
-        console.log("setSteps");
-        exports.each(steps, step, 'R');
+        exports.each(steps, step, rootPrefix);
         rootStep.children = steps;
-        console.log(rootStep);
+        csl.log(rootStep, '');
         activePath.setData(rootStep);
     }
 
     function start(path) {
+        if (!options.async) {
+            intv = 1;
+        }
         if (path) {
             activePath.setPath(typeof path === 'string' ? path.split('.') : path);
         } else {
             activePath.setPath([0]);
         }
-        console.log("start %s", activePath.getSelected().label);
+        csl.log(activePath.getSelected(), "start %s", activePath.getSelected().label);
         api.dispatch(events.START, activePath.getSelected());
-        run();
+        api.dispatch(events.STEP_START, activePath.getSelected(), activePath.getPath());
+        go();
     }
 
     function stop() {
@@ -48,69 +52,115 @@ function runner(api) {
         }
     }
 
-    function run() {
-        var activeStep = activePath.getSelected();
-        console.log("run %s state:%s", activeStep.label, activeStep.state);
-        reportProgress();
-        if (activeStep.children.length && activeStep.childIndex === -1) {
-            activePath.next();
-        } else if (activeStep.state === states.COMPLETE) {
-            console.log("\tcomplete %s", activeStep.label);
-            if (activeStep.type === types.ROOT) {
-                api.stop();
-                return;
-            }
-            api.dispatch(events.STEP_END, activeStep, activePath.getPath());
-            activePath.next();
-            api.dispatch(events.STEP_START, activePath.getSelected(), activePath.getPath());
-        } else if (activeStep.time < activeStep.maxTime) {
-            activeStep.state = states.RUNNING;
-            console.log("\trun method %s", activeStep.type);
-            methods[activeStep.type](activeStep);
-            updateTime(activeStep);
-            api.dispatch(events.STEP_UPDATE, activePath.getSelected(), activePath.getPath());
-            if (activeStep.status === statuses.PASS) {
-                console.log("\tpass %s", activeStep.label);
-                if (activeStep.type === types.ROOT) {
-                    activeStep.state = states.COMPLETE;
-                    reportProgress();
-                    api.stop();
-                    return;
-                }
-            }
-        } else {
-            expire(activeStep);
-            return; // we are expired.
-        }
+    function go() {
         if (options.async) {
             clearTimeout(intv);
-            intv = setTimeout(run, activeStep.increment);
+            intv = setTimeout(run, activePath.getSelected().increment);
         } else {
             run();
         }
+    }
+
+    function run() {
+        var activeStep = activePath.getSelected();
+        csl.log(activeStep, "run %s state:%s", activeStep.label, activeStep.state);
+        reportProgress();
+        // conditionals exec first. others exec last.
+        if (activePath.isCondition(activeStep)) {
+            if (activeStep.status === statuses.SKIP) {
+                activeStep.progress = 0;
+                next();
+            } else if (activeStep.state === states.COMPLETE) {
+                next();
+            } else if (activeStep.status !== statuses.PASS) {
+                exec(activeStep);
+            } else if (activeStep.children.length && activeStep.childIndex < activeStep.children.length - 1) {
+                next();
+            } else if (activeStep.time < activeStep.maxTime) {
+                activeStep.state = states.COMPLETE;
+                completeStep(activeStep);
+            } else {
+                expire(activeStep);
+            }
+        } else {
+            if (activeStep.children.length && activeStep.childIndex === -1) {
+                activePath.next();
+            } else if (activeStep.state === states.COMPLETE) {
+                completeStep(activeStep);
+            } else if (activeStep.time < activeStep.maxTime) {
+                exec(activeStep);
+            } else {
+                expire(activeStep);
+            }
+        }
+        if (!intv) {
+            return;
+        }
+        go();
+    }
+
+    function next() {
+        activePath.next();
+        api.dispatch(events.STEP_START, activePath.getSelected(), activePath.getPath());
+    }
+
+    function exec(activeStep) {
+        activeStep.state = states.RUNNING;
+        csl.log(activeStep, "run method %s", activeStep.type);
+        activeStep.status = methods[activeStep.type](activeStep);
+        updateTime(activeStep);
+        api.dispatch(events.STEP_UPDATE, activePath.getSelected(), activePath.getPath());
+        if (activeStep.status === statuses.PASS) {
+            activeStep.state = states.COMPLETE;
+            activePath.skipBlock();
+            csl.log(activeStep, "pass %s", activeStep.label);
+            if (activeStep.type === types.ROOT) {
+                reportProgress();
+                api.stop();
+                return;
+            }
+        } else if (activeStep.time > activeStep.maxTime) {
+            expire(activeStep);
+        }
+    }
+
+    function completeStep(activeStep) {
+        activeStep.endTime = Date.now();
+        updateTime(activeStep);
+        csl.log(activeStep, "complete %s", activeStep.label);
+        if (activeStep.type === types.ROOT) {
+            api.stop();
+            return;
+        }
+        api.dispatch(events.STEP_END, activeStep, activePath.getPath());
+        next();
     }
 
     function reportProgress() {
         //TODO: break up into just id's and progress for each.
         var changes = activePath.getProgressChanges(), list = [];
         exports.each(changes, function (step) {
-            list.push({uid: step.uid, progress: step.progress});
+            var item = {uid: step.uid, progress: step.progress};
+            if (step.type === types.ROOT) {
+                item.timeLeft = step.timeLeft = activePath.getTime();
+            }
+            list.push(item);
         });
-        api.dispatch(events.PROGRESS, list);
+        api.dispatch(events.PROGRESS, changes);
     }
 
     function expire(step) {
-        console.log("\trun expired");
+        csl.log(activePath.getSelected(), "run expired");
         updateTime(step);
-        console.log("\texpired %s %s/%s", step.label, step.time, step.maxTime);
-        step.status = statuses.TIMED_OUT;
+        csl.log(activePath.getSelected(), "expired %s %s/%s", step.label, step.time, step.maxTime);
+        step.status = activePath.isCondition(step) ? statuses.SKIP : statuses.TIMED_OUT;
         step.state = states.COMPLETE;
     }
 
     function updateTime(step) {
         if (!step.startTime) step.startTime = Date.now();
         step.time = Date.now() - step.startTime;
-        console.log("\tupdateTime %s %s/%s", step.label, step.time, step.maxTime);
+        csl.log(activePath.getSelected(), "updateTime %s %s/%s", step.label, step.time, step.maxTime);
     }
 
     function getStepFromPath(path, index, step) {

@@ -2,14 +2,28 @@ function MethodAPI(dispatcher) {
     this.dispatcher = dispatcher;
 }
 MethodAPI.prototype[types.STEP] = function (step) {
-    step.status = statuses.PASS;
-    step.state = states.COMPLETE;
-};
-MethodAPI.prototype[types.FIND] = function (step) {
-    step.status = statuses.PASS;
-    step.state = states.COMPLETE;
+    return statuses.PASS;
 };
 MethodAPI.prototype[types.ROOT] = MethodAPI.prototype[types.STEP];
+MethodAPI.prototype[types.FIND] = function (step) {
+    return statuses.PASS;
+};
+MethodAPI.prototype[types.IF] = function (step) {
+    if (step.time > step.maxTime * 0.5) {
+        return step.override || statuses.PASS;
+    } else {
+        return states.FAIL;
+    }
+//    step.state = states.COMPLETE;
+};
+MethodAPI.prototype[types.ELSEIF] = function (step) {
+    return step.override || statuses.PASS;
+//    step.state = states.COMPLETE;
+};
+MethodAPI.prototype[types.ELSE] = function (step) {
+    return step.override || statuses.PASS;
+//    step.state = states.COMPLETE;
+};
 
 
 /**
@@ -96,7 +110,7 @@ var cb_addEventListener = function(obj, evt, fnc) {
                 return function(){
                     f1.apply(this,arguments);
                     f2.apply(this,arguments);
-                }
+                };
             })(obj[evt], fnc);
         }
         obj[evt] = fnc;
