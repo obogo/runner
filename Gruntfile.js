@@ -38,6 +38,7 @@ module.exports = function (grunt) {
                         'src/lib/ux-util-array.js',
                         'src/lib/ux-each.js',
                         'src/lib/ux-extend.js',
+                        'src/runner/log.js',
                         'src/runner/types.js',
                         'src/runner/step.js',
                         'src/runner/MethodAPI.js',

@@ -156,16 +156,39 @@ exports.extend = function(destination, source) {
     return destination;
 };
 
+var csl = function() {
+    var api = {};
+    function log(step) {
+        var depth = step.uid.split(".").length, args = exports.util.array.toArray(arguments), str = charPack("	", depth) + step.uid + ":" + step.type + ":" + step.status + ":" + step.state + ":" + step.progress + "::";
+        args.shift();
+        args[0] = str + args[0];
+        console.log.apply(console, args);
+    }
+    function charPack(c, len) {
+        var s = "";
+        while (s.length < len) {
+            s += c;
+        }
+        return s;
+    }
+    api.log = log;
+    return api;
+}();
+
 var types = {
     ROOT: "root",
     STEP: "step",
     FIND: "find",
     CHAIN: "chain",
-    CONDITION: "condition"
+    IF: "if",
+    ELSEIF: "elseif",
+    ELSE: "else"
 }, statuses = {
+    UNRESOLVED: "unresolved",
     FAIL: "fail",
     PASS: "pass",
-    TIMED_OUT: "timedOut"
+    TIMED_OUT: "timedOut",
+    SKIP: "skip"
 }, states = {
     WAITING: "waiting",
     ENTERING: "entering",
@@ -182,17 +205,18 @@ function step(options, index, list, parentPath) {
         index: index,
         label: "",
         type: "step",
-        selector: "",
-        check: "",
-        pass: false,
+        status: statuses.UNRESOLVED,
+        state: states.WAITING,
         childIndex: -1,
         children: [],
+        skipCount: 0,
         startTime: 0,
+        endTime: 0,
         time: 0,
-        increment: 100,
+        increment: 50,
+        expectedTime: 100,
         maxTime: 2e3,
-        progress: 0,
-        state: states.WAITING
+        progress: 0
     };
     exports.extend(item, options);
     if (list) list[index] = item;
@@ -209,16 +233,30 @@ function MethodAPI(dispatcher) {
 }
 
 MethodAPI.prototype[types.STEP] = function(step) {
-    step.status = statuses.PASS;
-    step.state = states.COMPLETE;
-};
-
-MethodAPI.prototype[types.FIND] = function(step) {
-    step.status = statuses.PASS;
-    step.state = states.COMPLETE;
+    return statuses.PASS;
 };
 
 MethodAPI.prototype[types.ROOT] = MethodAPI.prototype[types.STEP];
+
+MethodAPI.prototype[types.FIND] = function(step) {
+    return statuses.PASS;
+};
+
+MethodAPI.prototype[types.IF] = function(step) {
+    if (step.time > step.maxTime * .5) {
+        return step.override || statuses.PASS;
+    } else {
+        return states.FAIL;
+    }
+};
+
+MethodAPI.prototype[types.ELSEIF] = function(step) {
+    return step.override || statuses.PASS;
+};
+
+MethodAPI.prototype[types.ELSE] = function(step) {
+    return step.override || statuses.PASS;
+};
 
 function fireEvent(node, eventName) {
     var doc, event, bubbles, eventClass;
@@ -260,15 +298,37 @@ function fireEvent(node, eventName) {
     }
 }
 
+var cb_addEventListener = function(obj, evt, fnc) {
+    if (obj.addEventListener) {
+        obj.addEventListener(evt, fnc, false);
+        return true;
+    } else if (obj.attachEvent) {
+        return obj.attachEvent("on" + evt, fnc);
+    } else {
+        evt = "on" + evt;
+        if (typeof obj[evt] === "function") {
+            fnc = function(f1, f2) {
+                return function() {
+                    f1.apply(this, arguments);
+                    f2.apply(this, arguments);
+                };
+            }(obj[evt], fnc);
+        }
+        obj[evt] = fnc;
+        return true;
+    }
+    return false;
+};
+
 function Path() {
-    var selected, root, values = [], prop = "children";
+    var selected, root, values = [], prop = "children", pendingProgressChanges;
     function setData(rootStep) {
         selected = root = rootStep;
     }
     function setPath(path) {
         var step = root;
         exports.each(path, function(pathIndex) {
-            console.log("%s.childIndex = %s", step.label, pathIndex);
+            csl.log(step, "%s.childIndex = %s", step.label, pathIndex);
             pathIndex = parseInt(pathIndex, 10);
             step.childIndex = pathIndex;
             step = step[prop][pathIndex];
@@ -276,7 +336,7 @@ function Path() {
             selected = step;
             selected.state = states.ENTERING;
         });
-        console.log("values %s", values.join("."));
+        csl.log(step, "values %s", values.join("."));
     }
     function getPath(offShift) {
         if (offShift) {
@@ -292,60 +352,77 @@ function Path() {
     }
     function next() {
         if (!selected) {
-            selected = root;
-            selected.state = states.ENTERING;
-            console.log("	%cRoot Start: %s", "color:#F90", selected.label);
+            select(root);
+            csl.log("	%cRoot Start: %s", "color:#F90", selected.label);
         }
-        if (getNextChild() || getNextSibling() || getParent()) {
+        if (selectNextChild() || selectNextSibling() || selectParent()) {
+            if (selected.status === statuses.SKIP) {
+                next();
+            }
             return;
         }
         if (selected === root) {
-            console.log("	%cROOT: %s", "color:#F90", selected.label);
+            csl.log(selected, "%cROOT: %s", "color:#F90", selected.label);
             return;
         } else {
             next();
         }
     }
-    function getNextChild() {
+    function uidToPath(step) {
+        var path = step.uid.split("."), i = 0, len = path.length - 1;
+        path.shift();
+        while (i < len) {
+            path[i] = parseInt(path[i], 10);
+            i += 1;
+        }
+        return path;
+    }
+    function select(step) {
+        var parent, path = uidToPath(step), i = 0, len = path.length;
+        parent = getStepFromPath(path, 0, root, -1);
+        if (parent) {
+            parent.childIndex = path[len - 1];
+        }
+        values.length = 0;
+        while (i < len) {
+            values[i] = path[i];
+            i += 1;
+        }
+        selected = step;
+        selected.state = states.ENTERING;
+    }
+    function selectNextChild() {
         var len = selected.children.length;
-        if (selected.childIndex >= len) {
+        if (selected.status === statuses.SKIP || selected.childIndex >= len) {
             return false;
         }
         if (len && selected.childIndex + 1 < len) {
-            selected.childIndex += 1;
-            values.push(selected.childIndex);
-            selected = selected.children[selected.childIndex];
-            selected.state = states.ENTERING;
-            console.log("	%cgetNextChild: %s", "color:#F90", selected.label);
+            select(selected.children[selected.childIndex + 1]);
+            csl.log(selected, "%cgetNextChild: %s", "color:#F90", selected.label);
             return true;
         }
         selected.childrenComplete = true;
         return false;
     }
-    function getParent() {
+    function selectParent() {
         var step = getStepFromPath(values, 0, root, -1);
         if (step) {
-            values.pop();
-            selected = step;
-            selected.state = states.ENTERING;
-            console.log("	%cgetParent: %s", "color:#F90", selected.label);
+            select(step);
+            csl.log(selected, "%cgetParent: %s", "color:#F90", selected.label);
             return true;
         }
         return false;
     }
-    function getNextSibling() {
-        var step, parent, len = values.length - 1;
+    function selectNextSibling() {
+        var step, len = values.length - 1;
         values[len] += 1;
-        step = getStepFromPath(values);
+        step = getStepFromPath(values, 0, root, 0);
         if (step) {
-            parent = getStepFromPath(values, 0, root, -1);
-            parent.childIndex = values[len];
-            selected = step;
-            selected.state = states.ENTERING;
-            console.log("	%cgetNextSibling: %s", "color:#F90", selected.label);
+            select(step);
+            csl.log(selected, "%cgetNextSibling: %s", "color:#F90", selected.label);
             return true;
         } else {
-            return getParent();
+            return selectParent();
         }
         return false;
     }
@@ -364,17 +441,30 @@ function Path() {
         return null;
     }
     function getParentFrom(step) {
-        var path = step.uid.split(".");
-        path.shift();
-        path.pop();
-        return path.length ? getStepFromPath(path) : root;
+        var path = uidToPath(step);
+        return path.length ? getStepFromPath(path, 0, root, -1) : root;
+    }
+    function getAllProgress() {
+        var changed = [];
+        _getAllProgress(root, null, null, changed);
+        return changed;
+    }
+    function _getAllProgress(step, index, list, changed) {
+        if (step.status === statuses.SKIP) {
+            exports.each(step.children, skipStep);
+        }
+        exports.each(step.children, _getAllProgress, changed);
+        updateProgress(step, changed);
     }
     function getRunPercent(step) {
-        return step.time > step.maxTime ? 1 : step.time / step.maxTime;
+        return step.status === statuses.PASS ? 1 : step.time > step.maxTime ? 1 : step.time / step.maxTime;
     }
     function getProgressChanges(step, changed) {
-        changed = changed || [];
+        changed = changed || pendingProgressChanges && pendingProgressChanges.slice() || [];
         step = step || getSelected();
+        if (pendingProgressChanges) {
+            pendingProgressChanges = null;
+        }
         updateProgress(step, changed);
         var parent = getParentFrom(step);
         if (parent && parent !== step) {
@@ -382,25 +472,114 @@ function Path() {
         }
         return changed;
     }
+    function storeProgressChanges(step) {
+        pendingProgressChanges = getProgressChanges(step);
+    }
     function updateProgress(step, changed) {
         var len, childProgress, i = 0;
+        if (step.status === statuses.SKIP) {
+            step.progress = 0;
+            return;
+        }
         if (step.state === states.COMPLETE) {
             step.progress = 1;
         } else {
             len = step.children.length;
             if (len && step.childIndex !== -1) {
                 childProgress = 0;
+                step.skipCount = 0;
                 while (i <= step.childIndex && i < len) {
-                    childProgress += step.children[i].progress;
+                    if (step.children[i].status != statuses.SKIP) {
+                        childProgress += step.children[i].progress;
+                    } else {
+                        step.skipCount += 1;
+                    }
                     i += 1;
                 }
                 childProgress += getRunPercent(step);
-                step.progress = childProgress / (len + 1);
+                step.progress = childProgress / (len - step.skipCount + (step.type !== types.ROOT ? 1 : 0));
             } else {
                 step.progress = getRunPercent(step);
             }
         }
         changed.push(step);
+    }
+    function skipBlock() {
+        if (selected.type === types.IF || selected.type === types.ELSEIF || selected.type === types.ELSE) {
+            var parent = getStepFromPath(values, 0, root, -1);
+            if (selected.type === types.ELSEIF || selected.type === types.ELSE) {
+                skipPreDependentChildCondition(parent);
+            }
+            if (selected.type === types.IF || selected.type === types.ELSEIF) {
+                skipPostDependentCondition(parent);
+            }
+        }
+    }
+    function skipPreDependentChildCondition(parent) {
+        var j = parent.childIndex - 1, jLen = 0;
+        while (j >= jLen) {
+            var s = parent.children[j];
+            if (s.type === types.IF || s.type === types.ELSEIF) {
+                skipStep(s);
+            } else {
+                break;
+            }
+            j -= 1;
+        }
+    }
+    function skipPostDependentCondition(parent) {
+        var i = parent.childIndex + 1, iLen = parent.children.length;
+        while (i < iLen) {
+            var s = parent.children[i];
+            if (s.type === types.ELSEIF || s.type === types.ELSE) {
+                skipStep(s);
+            } else {
+                break;
+            }
+            i += 1;
+        }
+    }
+    function skipStep(step) {
+        if (step.status !== statuses.SKIP) {
+            csl.log(step, "%cSKIP %s", "color:#FF6600", step.uid);
+            var parent = getParentFrom(step);
+            step.status = statuses.SKIP;
+            storeProgressChanges(step);
+        }
+    }
+    function isCondition(step) {
+        return step.type === types.IF || step.type === types.ELSEIF || step.type === types.ELSE;
+    }
+    function getTime() {
+        var result = getStepTime(root), avg = result.time / result.complete, estimate = result.total * avg;
+        if (result.totalTime > estimate) {
+            estimate = result.totalTime;
+        }
+        result.estimate = Math.ceil((estimate - result.time) * .001);
+        return result;
+    }
+    function getStepTime(step) {
+        var complete = 0, total = 0, time = 0, totalTime = 0, result, i = 0, iLen = step.children.length;
+        while (i < iLen) {
+            if (step.children.length) {
+                result = getStepTime(step.children[i]);
+                complete += result.complete;
+                total += result.total;
+                time += result.time;
+                totalTime += result.totalTime;
+            }
+            complete += step.state === states.COMPLETE ? 1 : 0;
+            total += 1;
+            time += step.time;
+            totalTime += step.time || step.increment * 2;
+            i += 1;
+        }
+        return {
+            complete: complete,
+            total: total,
+            time: time,
+            totalTime: totalTime
+        };
     }
     this.setData = setData;
     this.setPath = setPath;
@@ -409,37 +588,45 @@ function Path() {
     this.getSelected = getSelected;
     this.getPath = getPath;
     this.getProgressChanges = getProgressChanges;
+    this.getAllProgress = getAllProgress;
+    this.skipBlock = skipBlock;
+    this.isCondition = isCondition;
+    this.getTime = getTime;
 }
 
 function runner(api) {
     dispatcher(api);
-    var methods = new MethodAPI(api), activePath = new Path(), options = {
+    var rootPrefix = "R", methods = new MethodAPI(api), activePath = new Path(), options = {
         async: true
     }, intv, rootStep = step({
-        uid: "R",
+        uid: rootPrefix,
         label: "root",
         type: "root",
-        index: -1
+        index: -1,
+        maxTime: 100
     });
     function getSteps() {
         return rootStep.children;
     }
     function setSteps(steps) {
-        console.log("setSteps");
-        exports.each(steps, step, "R");
+        exports.each(steps, step, rootPrefix);
         rootStep.children = steps;
-        console.log(rootStep);
+        csl.log(rootStep, "");
         activePath.setData(rootStep);
     }
     function start(path) {
+        if (!options.async) {
+            intv = 1;
+        }
         if (path) {
             activePath.setPath(typeof path === "string" ? path.split(".") : path);
         } else {
             activePath.setPath([ 0 ]);
         }
-        console.log("start %s", activePath.getSelected().label);
+        csl.log(activePath.getSelected(), "start %s", activePath.getSelected().label);
         api.dispatch(events.START, activePath.getSelected());
-        run();
+        api.dispatch(events.STEP_START, activePath.getSelected(), activePath.getPath());
+        go();
     }
     function stop() {
         clearTimeout(intv);
@@ -454,68 +641,109 @@ function runner(api) {
             start();
         }
     }
-    function run() {
-        var activeStep = activePath.getSelected();
-        console.log("run %s state:%s", activeStep.label, activeStep.state);
-        reportProgress();
-        if (activeStep.children.length && activeStep.childIndex === -1) {
-            activePath.next();
-        } else if (activeStep.state === states.COMPLETE) {
-            console.log("	complete %s", activeStep.label);
-            if (activeStep.type === types.ROOT) {
-                api.stop();
-                return;
-            }
-            api.dispatch(events.STEP_END, activeStep, activePath.getPath());
-            activePath.next();
-            api.dispatch(events.STEP_START, activePath.getSelected(), activePath.getPath());
-        } else if (activeStep.time < activeStep.maxTime) {
-            activeStep.state = states.RUNNING;
-            console.log("	run method %s", activeStep.type);
-            methods[activeStep.type](activeStep);
-            updateTime(activeStep);
-            api.dispatch(events.STEP_UPDATE, activePath.getSelected(), activePath.getPath());
-            if (activeStep.status === statuses.PASS) {
-                console.log("	pass %s", activeStep.label);
-                if (activeStep.type === types.ROOT) {
-                    activeStep.state = states.COMPLETE;
-                    reportProgress();
-                    api.stop();
-                    return;
-                }
-            }
-        } else {
-            expire(activeStep);
-            return;
-        }
+    function go() {
         if (options.async) {
             clearTimeout(intv);
-            intv = setTimeout(run, activeStep.increment);
+            intv = setTimeout(run, activePath.getSelected().increment);
         } else {
             run();
         }
     }
+    function run() {
+        var activeStep = activePath.getSelected();
+        csl.log(activeStep, "run %s state:%s", activeStep.label, activeStep.state);
+        reportProgress();
+        if (activePath.isCondition(activeStep)) {
+            if (activeStep.status === statuses.SKIP) {
+                activeStep.progress = 0;
+                next();
+            } else if (activeStep.state === states.COMPLETE) {
+                next();
+            } else if (activeStep.status !== statuses.PASS) {
+                exec(activeStep);
+            } else if (activeStep.children.length && activeStep.childIndex < activeStep.children.length - 1) {
+                next();
+            } else if (activeStep.time < activeStep.maxTime) {
+                activeStep.state = states.COMPLETE;
+                completeStep(activeStep);
+            } else {
+                expire(activeStep);
+            }
+        } else {
+            if (activeStep.children.length && activeStep.childIndex === -1) {
+                activePath.next();
+            } else if (activeStep.state === states.COMPLETE) {
+                completeStep(activeStep);
+            } else if (activeStep.time < activeStep.maxTime) {
+                exec(activeStep);
+            } else {
+                expire(activeStep);
+            }
+        }
+        if (!intv) {
+            return;
+        }
+        go();
+    }
+    function next() {
+        activePath.next();
+        api.dispatch(events.STEP_START, activePath.getSelected(), activePath.getPath());
+    }
+    function exec(activeStep) {
+        activeStep.state = states.RUNNING;
+        csl.log(activeStep, "run method %s", activeStep.type);
+        activeStep.status = methods[activeStep.type](activeStep);
+        updateTime(activeStep);
+        api.dispatch(events.STEP_UPDATE, activePath.getSelected(), activePath.getPath());
+        if (activeStep.status === statuses.PASS) {
+            activeStep.state = states.COMPLETE;
+            activePath.skipBlock();
+            csl.log(activeStep, "pass %s", activeStep.label);
+            if (activeStep.type === types.ROOT) {
+                reportProgress();
+                api.stop();
+                return;
+            }
+        } else if (activeStep.time > activeStep.maxTime) {
+            expire(activeStep);
+        }
+    }
+    function completeStep(activeStep) {
+        activeStep.endTime = Date.now();
+        updateTime(activeStep);
+        csl.log(activeStep, "complete %s", activeStep.label);
+        if (activeStep.type === types.ROOT) {
+            api.stop();
+            return;
+        }
+        api.dispatch(events.STEP_END, activeStep, activePath.getPath());
+        next();
+    }
     function reportProgress() {
         var changes = activePath.getProgressChanges(), list = [];
         exports.each(changes, function(step) {
-            list.push({
+            var item = {
                 uid: step.uid,
                 progress: step.progress
-            });
+            };
+            if (step.type === types.ROOT) {
+                item.timeLeft = step.timeLeft = activePath.getTime();
+            }
+            list.push(item);
         });
-        api.dispatch(events.PROGRESS, list);
+        api.dispatch(events.PROGRESS, changes);
     }
     function expire(step) {
-        console.log("	run expired");
+        csl.log(activePath.getSelected(), "run expired");
         updateTime(step);
-        console.log("	expired %s %s/%s", step.label, step.time, step.maxTime);
-        step.status = statuses.TIMED_OUT;
+        csl.log(activePath.getSelected(), "expired %s %s/%s", step.label, step.time, step.maxTime);
+        step.status = activePath.isCondition(step) ? statuses.SKIP : statuses.TIMED_OUT;
         step.state = states.COMPLETE;
     }
     function updateTime(step) {
         if (!step.startTime) step.startTime = Date.now();
         step.time = Date.now() - step.startTime;
-        console.log("	updateTime %s %s/%s", step.label, step.time, step.maxTime);
+        csl.log(activePath.getSelected(), "updateTime %s %s/%s", step.label, step.time, step.maxTime);
     }
     function getStepFromPath(path, index, step) {
         step = step || rootStep;
