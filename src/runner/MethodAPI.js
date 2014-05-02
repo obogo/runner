@@ -9,11 +9,11 @@ MethodAPI.prototype[types.FIND] = function (step) {
     return statuses.PASS;
 };
 MethodAPI.prototype[types.IF] = function (step) {
-    if (step.time > step.maxTime * 0.5) {
+//    if (step.time > step.maxTime * 0.5) {
         return step.override || statuses.PASS;
-    } else {
-        return states.FAIL;
-    }
+//    } else {
+//        return states.FAIL;
+//    }
 //    step.state = states.COMPLETE;
 };
 MethodAPI.prototype[types.ELSEIF] = function (step) {

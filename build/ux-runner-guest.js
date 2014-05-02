@@ -8,6 +8,7 @@ var ex = exports.runner = exports.runner || {};
 
 ex.events = {
     START: "runner:start",
+    RESET: "runner:reset",
     PROGRESS: "runner:progress",
     STEP_START: "runner:stepStart",
     STEP_UPDATE: "runner:stepUpdate",

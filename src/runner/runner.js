@@ -8,15 +8,29 @@ function runner(api) {
             async: true
         },
         intv,
-        rootStep = step({uid:rootPrefix, label:'root', type:'root', index: -1, maxTime: 100});
+        _steps,
+        rootStep = importStep({uid:rootPrefix, label:types.ROOT, type:types.ROOT, children:[], index: -1, maxTime: 100}),
+        diffRoot;
 
     function getSteps() {
         return rootStep.children;
     }
 
     function setSteps(steps) {
-        exports.each(steps, step, rootPrefix);
-        rootStep.children = steps;
+        _steps = steps;
+        reset();
+    }
+
+    function reset() {
+        stop();
+        applySteps(_steps);
+        rootStep.timeLeft = activePath.getTime();
+        api.dispatch(events.RESET, rootStep);
+    }
+
+    function applySteps(steps) {
+        var mySteps = exports.each(steps.slice(), importStep, rootPrefix);
+        rootStep.children = mySteps;
         csl.log(rootStep, '');
         activePath.setData(rootStep);
     }
@@ -138,7 +152,7 @@ function runner(api) {
 
     function reportProgress() {
         //TODO: break up into just id's and progress for each.
-        var changes = activePath.getProgressChanges(), list = [];
+        var changes = activePath.getProgressChanges(), list = [], exportData;
         exports.each(changes, function (step) {
             var item = {uid: step.uid, progress: step.progress};
             if (step.type === types.ROOT) {
@@ -147,6 +161,11 @@ function runner(api) {
             list.push(item);
         });
         api.dispatch(events.PROGRESS, changes);
+        exportData = exportStep(rootStep);
+//        console.log("EXPORT: %o", exportData);
+        var myDiff = exports.data.diff(diffRoot, exportData);//, diffRoot || {});
+        console.log("DIFF: %o", myDiff);
+        diffRoot = exportData;
     }
 
     function expire(step) {
@@ -178,6 +197,7 @@ function runner(api) {
     api.start = start;
     api.stop = stop;
     api.resume = resume;
+    api.reset = reset;
     api.getSteps = getSteps;
     api.setSteps = setSteps;
 

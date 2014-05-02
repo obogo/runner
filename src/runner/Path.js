@@ -243,7 +243,6 @@ function Path() {
     function skipStep(step) {
         if (step.status !== statuses.SKIP) {
             csl.log(step, "%cSKIP %s", "color:#FF6600", step.uid);
-            var parent = getParentFrom(step);
             step.status = statuses.SKIP;
             storeProgressChanges(step);
         }
@@ -254,12 +253,13 @@ function Path() {
     }
 
     function getTime() {
-        var result = getStepTime(root), avg = result.time / result.complete, estimate = result.total * avg;
+        var result = getStepTime(root),
+            avg = result.complete ? result.time / result.complete : 0,
+            estimate = result.total * avg;
         if (result.totalTime > estimate) {
             estimate = result.totalTime;
         }
-        result.estimate = Math.ceil((estimate - result.time) * 0.001);
-        return result;
+        return Math.ceil((estimate - result.time) * 0.001);
     }
 
     function getStepTime(step) {

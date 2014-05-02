@@ -1,35 +1,79 @@
-function step(options, index, list, parentPath) {
+var justInTimeOnly = {$$hashKey:true},
+    omitOnSave = {$$hashKey:true, uid:true, index:true, state:true, status:true, progress:true, time:true, startTime: true, endTime:true};
+
+/**
+ * importSteps
+ * @param {Object} options
+ * @param {Number=} index
+ * @param {Array=} list
+ * @param {String=} aprentPath
+ * @returns {{}}
+ */
+function importStep(options, index, list, parentPath) {
     console.log("\tstep %s", options.label);
     parentPath = parentPath || '';
-    var uid = (parentPath ? parentPath + '.' : '') + (index !== undefined ? index : 'R');
-    var item = {
-        uid: uid,
-        index: index, // root will always have a negative index.
-        label: '',
-        type: 'step',// step, condition, find, etc.
-        status: statuses.UNRESOLVED,
-        state: states.WAITING,
-        childIndex: -1,
-        children: [], // children cannot have a parent reference because references cannot be passed.
-        skipCount: 0,
-        startTime: 0,
-        endTime: 0,
-        time: 0,
-        increment: 50,
-        expectedTime: 100, // for type:ajax calls do an expectation of 600ms by default.
-        maxTime: 2000,
-        progress: 0
-    };
-    exports.extend(item, options);
+    var uid = (parentPath ? parentPath + '.' : '') + (index !== undefined ? index : 'R'), i, iLen, children;
+    var item = {};
+    item.uid = uid;
+    item.index = index;
+    children = options.children;
+    exports.extend(item, defaults[types.STEP], defaults[options.type] || {}, options);
     if (list) list[index] = item;
-    if (item.children.length) {
-        exports.each(item.children, step, uid);
+    if (children && children.length) {
+        i = 0;
+        iLen = item.children.length;
+        item.children = [];
+        while (i < iLen) {
+            importStep(children[i], i, item.children, uid);
+            i += 1;
+        }
+    } else {
+        item.children = [];// so we don't have to keep checking for null.
     }
     if (!list) {
         return item;// so root can be created.
     }
 }
 
+/**
+ *
+ * @param step
+ * @param {Boolean=} clearJIT
+ * @returns {{}}
+ */
+function exportStep(step, clearJIT) {
+    return _exportSteps(step, null, null, null, clearJIT ? omitOnSave : justInTimeOnly);
+}
 
 //TODO: page transitions, ajax calls, socket calls, etc all should have different default expectedTimes.
 //TODO: write to local storage and read for page transitions. That way we always have the data immediately.
+/**
+ * _exportSteps
+ * @param {Object} step
+ * @param {Number=} index
+ * @param {Array=} list
+ * @param {Object=} outList
+ * @returns {{}}
+ */
+function _exportSteps(step, index, list, outList, omits) {
+    var out = {}, defaultProps, i = 0, iLen = step.children.length, prop;
+    while (i < iLen) {
+        defaultProps = defaults[step.type];
+        for (prop in step) {
+            if (omits[prop]) {
+                // do not add it.
+            } else if (prop === "children") {
+                out[prop] = {length: step.children.length};
+                exports.each(step.children, _exportSteps, out[prop], omits);
+            } else if (step.hasOwnProperty(prop) && defaultProps[prop] !== step[prop]) {
+                out[prop] = step[prop];
+            }
+        }
+        i += 1;
+    }
+    if (outList) {
+        outList[index] = out;
+    } else {
+        return out;
+    }
+}

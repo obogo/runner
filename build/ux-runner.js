@@ -8,6 +8,7 @@ var ex = exports.runner = exports.runner || {};
 
 ex.events = {
     START: "runner:start",
+    RESET: "runner:reset",
     PROGRESS: "runner:progress",
     STEP_START: "runner:stepStart",
     STEP_UPDATE: "runner:stepUpdate",
@@ -63,6 +64,263 @@ function dispatcher(target, scope, map) {
         target.dispatch = dispatch;
     }
 }
+
+var _;
+
+if (window._) {
+    _ = window._;
+} else {
+    Array.prototype.isArray = true;
+    _ = {};
+    _.extend = function(target, source) {
+        target = target || {};
+        for (var prop in source) {
+            if (source.hasOwnProperty(prop)) {
+                if (typeof source[prop] === "object") {
+                    target[prop] = _.extend(target[prop], source[prop]);
+                } else {
+                    target[prop] = source[prop];
+                }
+            }
+        }
+        return target;
+    };
+    _.isString = function(val) {
+        return typeof val === "string";
+    };
+    _.isBoolean = function(val) {
+        return typeof val === "boolean";
+    };
+    _.isNumber = function(val) {
+        return typeof val === "number";
+    };
+    _.isArray = function(val) {
+        return val ? !!val.isArray : false;
+    };
+    _.isEmpty = function(val) {
+        if (_.isString(val)) {
+            return val === "";
+        }
+        if (_.isArray(val)) {
+            return val.length === 0;
+        }
+        if (_.isObject(val)) {
+            for (var e in val) {
+                return false;
+            }
+            return true;
+        }
+        return false;
+    };
+    _.isUndefined = function(val) {
+        return typeof val === "undefined";
+    };
+    _.isFunction = function(val) {
+        return typeof val === "function";
+    };
+    _.isObject = function(val) {
+        return typeof val === "object";
+    };
+    _.isDate = function(val) {
+        return val instanceof Date;
+    };
+    var objectTypes = {
+        "boolean": false,
+        "function": true,
+        object: true,
+        number: false,
+        string: false,
+        undefined: false
+    };
+    _.isEqual = function baseIsEqual(a, b, callback, isWhere, stackA, stackB) {
+        if (callback) {
+            var result = callback(a, b);
+            if (typeof result != "undefined") {
+                return !!result;
+            }
+        }
+        if (a === b) {
+            return a !== 0 || 1 / a == 1 / b;
+        }
+        var type = typeof a, otherType = typeof b;
+        if (a === a && !(a && objectTypes[type]) && !(b && objectTypes[otherType])) {
+            return false;
+        }
+        if (a == null || b == null) {
+            return a === b;
+        }
+        var className = toString.call(a), otherClass = toString.call(b);
+        if (className == argsClass) {
+            className = objectClass;
+        }
+        if (otherClass == argsClass) {
+            otherClass = objectClass;
+        }
+        if (className != otherClass) {
+            return false;
+        }
+        switch (className) {
+          case boolClass:
+          case dateClass:
+            return +a == +b;
+
+          case numberClass:
+            return a != +a ? b != +b : a == 0 ? 1 / a == 1 / b : a == +b;
+
+          case regexpClass:
+          case stringClass:
+            return a == String(b);
+        }
+        var isArr = className == arrayClass;
+        if (!isArr) {
+            var aWrapped = hasOwnProperty.call(a, "__wrapped__"), bWrapped = hasOwnProperty.call(b, "__wrapped__");
+            if (aWrapped || bWrapped) {
+                return baseIsEqual(aWrapped ? a.__wrapped__ : a, bWrapped ? b.__wrapped__ : b, callback, isWhere, stackA, stackB);
+            }
+            if (className != objectClass) {
+                return false;
+            }
+            var ctorA = a.constructor, ctorB = b.constructor;
+            if (ctorA != ctorB && !(isFunction(ctorA) && ctorA instanceof ctorA && isFunction(ctorB) && ctorB instanceof ctorB) && ("constructor" in a && "constructor" in b)) {
+                return false;
+            }
+        }
+        var initedStack = !stackA;
+        stackA || (stackA = getArray());
+        stackB || (stackB = getArray());
+        var length = stackA.length;
+        while (length--) {
+            if (stackA[length] == a) {
+                return stackB[length] == b;
+            }
+        }
+        var size = 0;
+        result = true;
+        stackA.push(a);
+        stackB.push(b);
+        if (isArr) {
+            length = a.length;
+            size = b.length;
+            result = size == length;
+            if (result || isWhere) {
+                while (size--) {
+                    var index = length, value = b[size];
+                    if (isWhere) {
+                        while (index--) {
+                            if (result = baseIsEqual(a[index], value, callback, isWhere, stackA, stackB)) {
+                                break;
+                            }
+                        }
+                    } else if (!(result = baseIsEqual(a[size], value, callback, isWhere, stackA, stackB))) {
+                        break;
+                    }
+                }
+            }
+        } else {
+            forIn(b, function(value, key, b) {
+                if (hasOwnProperty.call(b, key)) {
+                    size++;
+                    return result = hasOwnProperty.call(a, key) && baseIsEqual(a[key], value, callback, isWhere, stackA, stackB);
+                }
+            });
+            if (result && !isWhere) {
+                forIn(a, function(value, key, a) {
+                    if (hasOwnProperty.call(a, key)) {
+                        return result = --size > -1;
+                    }
+                });
+            }
+        }
+        stackA.pop();
+        stackB.pop();
+        if (initedStack) {
+            releaseArray(stackA);
+            releaseArray(stackB);
+        }
+        return result;
+    };
+}
+
+exports.data = exports.data || {};
+
+exports.data.inspector = function() {
+    function Inspector(data) {
+        this.data = data || {};
+    }
+    Inspector.prototype.get = function(path, delimiter) {
+        var arr = path.split(delimiter || "."), space = "", i = 0, len = arr.length;
+        var data = this.data;
+        while (i < len) {
+            space = arr[i];
+            data = data[space];
+            if (data === undefined) {
+                break;
+            }
+            i += 1;
+        }
+        return data;
+    };
+    Inspector.prototype.set = function(path, value, delimiter, merge) {
+        var arr = path.split(delimiter || "."), space = "", i = 0, len = arr.length - 1;
+        var data = this.data;
+        while (i < len) {
+            space = arr[i];
+            if (space) {
+                if (data[space] === undefined || data[space] === null) {
+                    data = data[space] = {};
+                } else {
+                    data = data[space];
+                }
+            }
+            i += 1;
+        }
+        if (arr.length > 1) {
+            var prop = arr.pop();
+            if (data[prop] && merge) {
+                angular.extend(data[prop], value);
+            } else {
+                data[prop] = value;
+            }
+        }
+        return this.data;
+    };
+    Inspector.prototype.path = function(path) {
+        return this.set(path, {});
+    };
+    return function(data) {
+        return new Inspector(data);
+    };
+}();
+
+exports.data = exports.data || {};
+
+exports.data.diff = function(source, compare) {
+    var ret = {}, dateStr;
+    source = source || {};
+    for (var name in compare) {
+        if (name in source) {
+            if (_.isDate(compare[name])) {
+                dateStr = _.isDate(source[name]) ? source[name].toISOString() : source[name];
+                if (compare[name].toISOString() !== dateStr) {
+                    ret[name] = compare[name];
+                }
+            } else if (_.isObject(compare[name]) && !_.isArray(compare[name])) {
+                var diff = exports.data.diff(source[name], compare[name]);
+                if (!_.isEmpty(diff)) {
+                    ret[name] = diff;
+                }
+            } else if (!_.isEqual(source[name], compare[name])) {
+                ret[name] = compare[name];
+            }
+        } else {
+            ret[name] = compare[name];
+        }
+    }
+    if (_.isEmpty(ret)) {
+        return null;
+    }
+    return ret;
+};
 
 function toArray(obj) {
     var result = [], i = 0, len = obj.length;
@@ -179,10 +437,13 @@ var types = {
     ROOT: "root",
     STEP: "step",
     FIND: "find",
-    CHAIN: "chain",
     IF: "if",
     ELSEIF: "elseif",
-    ELSE: "else"
+    ELSE: "else",
+    AJAX: "ajax",
+    PATH: "path",
+    PAGE: "page",
+    SOCKET: "socket"
 }, statuses = {
     UNRESOLVED: "unresolved",
     FAIL: "fail",
@@ -194,21 +455,14 @@ var types = {
     ENTERING: "entering",
     RUNNING: "running",
     COMPLETE: "complete"
-}, events = ex.events;
-
-function step(options, index, list, parentPath) {
-    console.log("	step %s", options.label);
-    parentPath = parentPath || "";
-    var uid = (parentPath ? parentPath + "." : "") + (index !== undefined ? index : "R");
-    var item = {
-        uid: uid,
-        index: index,
+}, events = ex.events, defaults = {
+    root: {},
+    step: {
         label: "",
         type: "step",
         status: statuses.UNRESOLVED,
         state: states.WAITING,
         childIndex: -1,
-        children: [],
         skipCount: 0,
         startTime: 0,
         endTime: 0,
@@ -217,14 +471,107 @@ function step(options, index, list, parentPath) {
         expectedTime: 100,
         maxTime: 2e3,
         progress: 0
-    };
-    exports.extend(item, options);
+    },
+    find: {
+        maxTime: 1e4
+    },
+    "if": {
+        increment: 10,
+        expectedTime: 50,
+        maxTime: 500
+    },
+    elseif: {
+        increment: 10,
+        expectedTime: 50,
+        maxTime: 500
+    },
+    "else": {
+        increment: 10,
+        expectedTime: 50,
+        maxTime: 500
+    },
+    ajax: {
+        expectedTime: 600,
+        maxTime: 6e4
+    },
+    path: {
+        expectedTime: 1e3,
+        maxTime: 1e4
+    },
+    page: {
+        expectedTime: 2e3,
+        maxTime: 3e4
+    },
+    socked: {
+        expectedTime: 1e3,
+        maxTime: 1e4
+    }
+};
+
+var justInTimeOnly = {
+    $$hashKey: true
+}, omitOnSave = {
+    $$hashKey: true,
+    uid: true,
+    index: true,
+    state: true,
+    status: true,
+    progress: true,
+    time: true,
+    startTime: true,
+    endTime: true
+};
+
+function importStep(options, index, list, parentPath) {
+    console.log("	step %s", options.label);
+    parentPath = parentPath || "";
+    var uid = (parentPath ? parentPath + "." : "") + (index !== undefined ? index : "R"), i, iLen, children;
+    var item = {};
+    item.uid = uid;
+    item.index = index;
+    children = options.children;
+    exports.extend(item, defaults[types.STEP], defaults[options.type] || {}, options);
     if (list) list[index] = item;
-    if (item.children.length) {
-        exports.each(item.children, step, uid);
+    if (children && children.length) {
+        i = 0;
+        iLen = item.children.length;
+        item.children = [];
+        while (i < iLen) {
+            importStep(children[i], i, item.children, uid);
+            i += 1;
+        }
+    } else {
+        item.children = [];
     }
     if (!list) {
         return item;
+    }
+}
+
+function exportStep(step, clearJIT) {
+    return _exportSteps(step, null, null, null, clearJIT ? omitOnSave : justInTimeOnly);
+}
+
+function _exportSteps(step, index, list, outList, omits) {
+    var out = {}, defaultProps, i = 0, iLen = step.children.length, prop;
+    while (i < iLen) {
+        defaultProps = defaults[step.type];
+        for (prop in step) {
+            if (omits[prop]) {} else if (prop === "children") {
+                out[prop] = {
+                    length: step.children.length
+                };
+                exports.each(step.children, _exportSteps, out[prop], omits);
+            } else if (step.hasOwnProperty(prop) && defaultProps[prop] !== step[prop]) {
+                out[prop] = step[prop];
+            }
+        }
+        i += 1;
+    }
+    if (outList) {
+        outList[index] = out;
+    } else {
+        return out;
     }
 }
 
@@ -243,11 +590,7 @@ MethodAPI.prototype[types.FIND] = function(step) {
 };
 
 MethodAPI.prototype[types.IF] = function(step) {
-    if (step.time > step.maxTime * .5) {
-        return step.override || statuses.PASS;
-    } else {
-        return states.FAIL;
-    }
+    return step.override || statuses.PASS;
 };
 
 MethodAPI.prototype[types.ELSEIF] = function(step) {
@@ -542,7 +885,6 @@ function Path() {
     function skipStep(step) {
         if (step.status !== statuses.SKIP) {
             csl.log(step, "%cSKIP %s", "color:#FF6600", step.uid);
-            var parent = getParentFrom(step);
             step.status = statuses.SKIP;
             storeProgressChanges(step);
         }
@@ -551,12 +893,11 @@ function Path() {
         return step.type === types.IF || step.type === types.ELSEIF || step.type === types.ELSE;
     }
     function getTime() {
-        var result = getStepTime(root), avg = result.time / result.complete, estimate = result.total * avg;
+        var result = getStepTime(root), avg = result.complete ? result.time / result.complete : 0, estimate = result.total * avg;
         if (result.totalTime > estimate) {
             estimate = result.totalTime;
         }
-        result.estimate = Math.ceil((estimate - result.time) * .001);
-        return result;
+        return Math.ceil((estimate - result.time) * .001);
     }
     function getStepTime(step) {
         var complete = 0, total = 0, time = 0, totalTime = 0, result, i = 0, iLen = step.children.length;
@@ -598,19 +939,30 @@ function runner(api) {
     dispatcher(api);
     var rootPrefix = "R", methods = new MethodAPI(api), activePath = new Path(), options = {
         async: true
-    }, intv, rootStep = step({
+    }, intv, _steps, rootStep = importStep({
         uid: rootPrefix,
-        label: "root",
-        type: "root",
+        label: types.ROOT,
+        type: types.ROOT,
+        children: [],
         index: -1,
         maxTime: 100
-    });
+    }), diffRoot;
     function getSteps() {
         return rootStep.children;
     }
     function setSteps(steps) {
-        exports.each(steps, step, rootPrefix);
-        rootStep.children = steps;
+        _steps = steps;
+        reset();
+    }
+    function reset() {
+        stop();
+        applySteps(_steps);
+        rootStep.timeLeft = activePath.getTime();
+        api.dispatch(events.RESET, rootStep);
+    }
+    function applySteps(steps) {
+        var mySteps = exports.each(steps.slice(), importStep, rootPrefix);
+        rootStep.children = mySteps;
         csl.log(rootStep, "");
         activePath.setData(rootStep);
     }
@@ -720,7 +1072,7 @@ function runner(api) {
         next();
     }
     function reportProgress() {
-        var changes = activePath.getProgressChanges(), list = [];
+        var changes = activePath.getProgressChanges(), list = [], exportData;
         exports.each(changes, function(step) {
             var item = {
                 uid: step.uid,
@@ -732,6 +1084,10 @@ function runner(api) {
             list.push(item);
         });
         api.dispatch(events.PROGRESS, changes);
+        exportData = exportStep(rootStep);
+        var myDiff = exports.data.diff(diffRoot, exportData);
+        console.log("DIFF: %o", myDiff);
+        diffRoot = exportData;
     }
     function expire(step) {
         csl.log(activePath.getSelected(), "run expired");
@@ -759,6 +1115,7 @@ function runner(api) {
     api.start = start;
     api.stop = stop;
     api.resume = resume;
+    api.reset = reset;
     api.getSteps = getSteps;
     api.setSteps = setSteps;
     return api;

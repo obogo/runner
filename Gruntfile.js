@@ -35,6 +35,7 @@ module.exports = function (grunt) {
                         'src/package.js',
                         'src/lib/ux-dispatcher.js',
 //                        'src/lib/ux-selector.js',
+                        'src/lib/data/*.js',
                         'src/lib/ux-util-array.js',
                         'src/lib/ux-each.js',
                         'src/lib/ux-extend.js',
