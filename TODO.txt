@@ -1,0 +1,78 @@
+** NEED TO GET FocusGroup query selector updates pulled out and put into a module. It makes document.querySelectorAll faster. **
+
+still need frames because otherwise we cannot keep the runner running when the page changes.
+
+Testing Memory:
+    if you open the same page in IE, FF, Safari... and Chrome; and than navigate to about:memory in Chrome, it will report memory usage across all other browsers. Neat!
+
+Marketing Model
+    - Free account will not store date online for test results.
+    - Paid accounts will store for various amounts of time. Maybe a 30 day max? Or an option to save a result to file to compare for later.
+    http://simperium.com/pricing/ - sockets. pricing is awesome.
+    http://trackjs.com/blog/better-way-track-javascript-errors/ - a cool design.
+
+TODO:
+* NEED to have our ui run in a frame.
+    * and an need to have that change urls and pick up from same spot in test.
+
+    (W!) Location href change. ***** NEED PROOF OF CONCEPT ASAP ******
+        * need to be able to skipToStep(#) so that on page change the runner can jump to that step and continue.
+        [----------------- AFTER COMPLETE, this needs moved to a new project. ---------------------]
+
+    (R/W) Layout design for user interface.
+        - We need to design the user interface so that it gives an awesome user experience. Time should be taken to plan
+            this carefully.
+        - check boxes to enable or disable tests.
+        - collapsible rows.
+        - Actions so that certain steps can be repeated (like logging in).
+        - add assertions wherever.
+
+    (R) Analytics:
+        - Needs to be implemented with "TRACK THIS" option. So anyone can create analytics.
+        - Analytics needs to be it's own tab in the UI.
+
+    (W/R) End to end test with the user driving and it showing to your page.
+        (LiveTest) goinstant.com live recording.
+        record and playback.
+
+    (R) schema matching. Before or after they may want the data to match a schema. Rob's schema matching.
+
+    - Live chat with analytics - see goinstant.com widget at bottom right with question mark.
+        (called intercom)
+
+    (W) Performance steps could be in a column and based on an average of how log each of their child steps took.
+        - this way the chunks that go up if too many steps are slow slows it down. Performance score of all tests should be at the top.
+        (R) Performance Analytics
+            - performance results should be kept so that they can show the improvement or digression over time.
+        - Number of child steps for each node should be listed in a column. Those steps should count down or show x of y for each scene/scenario.
+            - this would allow the progress to show on each test.
+        - Custom threshold: This would allow the user to place what time any scenario, scene, or step, must complete in. If omitted or 0, the default
+            threshold is determined by the number of child steps and the average per step as listed above.
+        - PAID: make option to see how it performs under X number of users all doing the same thing at the same time.
+
+    (?) When starting to record they must enter a scenario and then scenes. Should these be renamed? (marathon, sprint, step...)
+        - They cannot just record, they need at least a scenario and a scene.
+        * This will not work for customers and recording their steps. A default scenario will need to be created with the user info.
+            steps may need to be able to attach directly to a scenario, or a default scenario created for auto record scenarios.
+
+    (W) Visual Test list:
+        - Need to gather the initial data of all steps so that they can see progress as it moves through them.
+        - This should then be able to list the estimated time to complete all of the tests and progress bar.
+
+    (W) Try/Catch needs to be enabled so that it will automatically pause or stop on an exception.
+        - Try to provide as much information about the error as possible. Including stack trace if possible.
+
+    (W) Events
+        - runnerEvent: These are the events for the steps that are fired from the runner so that the UI can display them.
+        - browserEvent: These are only listened to in recording mode. So that the events can be recorded and put together into a e2e test.
+            - MouseMovement: http://paperjs.org/examples/path-simplification/ - awesome framework for recording the mouse movements.
+                - need to auto implement hover states for elements that the mouse is over.
+
+    (W/R) Mock Service Responses:
+        - A way to capture and fake the service responses. So that a scenario can be run over and over without the data changing.
+            this would need to be optional so that they can re-record or just run against live services.
+            - This would also allow tests to run faster if they are using mock responses, mock responses need to be able to delay
+                or be instant.
+
+    (W) icons: needs to show timeout icons, paused icons, error, running, success, notRunYet. These show in front of the label so they are obvious.
+        - performance is not here. That has it's own column. Possibly something a free account doesn't get.
