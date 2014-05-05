@@ -1,8 +1,8 @@
 {
-    "name": "uxRunner",
-    "version": "0.0.0",
+    "name": "goRunner",
+    "version": "0.0.1",
     "filename": "runner",
-    "packageName": "ux",
+    "packageName": "go",
     "dependencies": {},
     "devDependencies": {
         "colors": "latest",
