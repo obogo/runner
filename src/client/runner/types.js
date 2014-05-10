@@ -3,7 +3,12 @@
 var types = {
         ROOT: 'root',
         STEP: 'step',
+        VAR: 'var',
         FIND: 'find',
+            FIND_TEXT: 'findText',
+            FIND_VAL: 'findVal',
+        ASSERT: 'assert',
+        EXPECT: 'expect',
         IF: 'if',
         ELSEIF: 'elseif',
         ELSE: 'else',
@@ -42,10 +47,27 @@ var types = {
             increment: 50,
             expectedTime: 100, // for type:ajax calls do an expectation of 600ms by default.
             maxTime: 2000,
-            progress: 0
+            progress: 0,
+            data: undefined, // expected to be passed in.
+            payload: undefined // this is for setting values that other steps can use to compare.
+        },
+        var: {
+            maxTime: 200,
+        },
+        assert: {
+            maxTime: 1000
+        },
+        expect: {
+            maxTime: 1000
         },
         find: {
             maxTime: 10000
+        },
+        findVal: {
+            maxTime: 1000
+        },
+        findText: {
+            maxTime: 1000
         },
         if: {
             increment: 10,

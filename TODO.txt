@@ -10,6 +10,8 @@ Marketing Model
     - Paid accounts will store for various amounts of time. Maybe a 30 day max? Or an option to save a result to file to compare for later.
     http://simperium.com/pricing/ - sockets. pricing is awesome.
     http://trackjs.com/blog/better-way-track-javascript-errors/ - a cool design.
+    keep results for last 1 for free and larger number of results of tests for paid accounts. They always get the result real time, but it is only saved if they paying up to X amount.
+        - always store at least the last result to prevent some tests from needing to re-run needlessly.
 
 TODO:
 * NEED to have our ui run in a frame.
@@ -76,3 +78,18 @@ TODO:
 
     (W) icons: needs to show timeout icons, paused icons, error, running, success, notRunYet. These show in front of the label so they are obvious.
         - performance is not here. That has it's own column. Possibly something a free account doesn't get.
+
+    (W/R) need to be able to have a proxy that they can request their services through so they can be recorded. All playback is on cached services.
+        - need to keep track of how long the service took to make it consistent with the app.
+        - simulate timing on the server for how long the service should take.
+
+    (W) if a selection (find) fails then QA can have the option presented to just replace the selection and pick a new one. OR keep up to this point and copy to a new test.
+
+    PHASE 1. Macros.
+
+    Admin to export the xml file to be able to run it again.
+
+    Make timestamps only do performance. Make so increments actually determine complete fail and the amount of steps.
+
+COMPETITORS:
+    http://speedcurve.com/ - page load speeds. uses Google Page Speed (https://developers.google.com/speed/pagespeed/). (Nice colors)

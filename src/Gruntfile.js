@@ -31,23 +31,32 @@ module.exports = function (grunt) {
                     footer: '<%= wrapEnd %>'
                 },
                 files: {
+                    '../public/client/js/<%= pkg.packageName %>-diff.js': [
+                        'lib/data/*.js'
+                    ],
                     '../public/client/js/<%= pkg.packageName %>-<%= pkg.filename %>-client.js': [
                         'package.js',
                         'lib/ux-dispatcher.js',
                         'lib/ux-util-array.js',
                         'lib/ux-each.js',
                         'lib/ux-extend.js',
+                        'lib/data/_.js',
+                        'lib/data/dataManager.js',
+                        'lib/data/diff.js',
                         'client/runner/log.js',
                         'client/runner/types.js',
                         'client/runner/step.js',
                         'client/runner/MethodAPI.js',
+                        'client/runner/methods/*.js',
                         'client/runner/Path.js',
-                        'client/runner/runner.js'
-//                        'src/lib/ux-selector.js',
+                        'client/runner/diffThrottle.js',
+                        'client/runner/runner.js',
+                        'lib/ux-selector.js'
 //                        'src/recorder.js',
                     ],
                     '../public/admin/js/<%= pkg.packageName %>-<%= pkg.filename %>-admin.js': [
                         'package.js',
+                        'lib/data/_.js',
                         'admin/admin.js'
                     ]
                 }
@@ -76,7 +85,7 @@ module.exports = function (grunt) {
                     debounceDelay: 1000
                 }
             }
-        },
+        }//,
 //        compress: {
 //            main: {
 //                options: {
@@ -109,6 +118,6 @@ module.exports = function (grunt) {
 
     // Default task(s).
 //    grunt.registerTask('default', ['jshint', 'uglify', 'compress']);
-    grunt.registerTask('default', ['jshint', 'uglify', 'copy']);
+    grunt.registerTask('default', ['jshint', 'uglify']);//, 'copy']);
 
 };

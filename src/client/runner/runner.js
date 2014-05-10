@@ -10,7 +10,8 @@ function runner(api) {
         intv,
         _steps,
         rootStep = importStep({uid:rootPrefix, label:types.ROOT, type:types.ROOT, children:[], index: -1, maxTime: 100}),
-        diffRoot;
+//        diffRoot,
+        differ = diffThrottle(api, rootStep, activePath, 1000);
 
     function getSteps() {
         return rootStep.children;
@@ -25,7 +26,7 @@ function runner(api) {
         stop();
         applySteps(_steps);
         rootStep.timeLeft = activePath.getTime();
-        api.dispatch(events.RESET, rootStep);
+        change(events.RESET);
     }
 
     function applySteps(steps) {
@@ -45,15 +46,16 @@ function runner(api) {
             activePath.setPath([0]);
         }
         csl.log(activePath.getSelected(), "start %s", activePath.getSelected().label);
-        api.dispatch(events.START, activePath.getSelected());
-        api.dispatch(events.STEP_START, activePath.getSelected(), activePath.getPath());
+        change(events.START);
         go();
     }
 
     function stop() {
-        clearTimeout(intv);
-        intv = 0;
-        api.dispatch(events.STOP);
+        if (intv) { // only stop if we are going.
+            clearTimeout(intv);
+            intv = 0;
+            change(events.STOP);
+        }
     }
 
     function resume() {
@@ -78,7 +80,6 @@ function runner(api) {
     function run() {
         var activeStep = activePath.getSelected();
         csl.log(activeStep, "run %s state:%s", activeStep.label, activeStep.state);
-        reportProgress();
         // conditionals exec first. others exec last.
         if (activePath.isCondition(activeStep)) {
             if (activeStep.status === statuses.SKIP) {
@@ -110,12 +111,13 @@ function runner(api) {
         if (!intv) {
             return;
         }
+        change(events.UPDATE);
         go();
     }
 
     function next() {
         activePath.next();
-        api.dispatch(events.STEP_START, activePath.getSelected(), activePath.getPath());
+        change();
     }
 
     function exec(activeStep) {
@@ -123,15 +125,13 @@ function runner(api) {
         csl.log(activeStep, "run method %s", activeStep.type);
         activeStep.status = methods[activeStep.type](activeStep);
         updateTime(activeStep);
-        api.dispatch(events.STEP_UPDATE, activePath.getSelected(), activePath.getPath());
         if (activeStep.status === statuses.PASS) {
             activeStep.state = states.COMPLETE;
             activePath.skipBlock();
             csl.log(activeStep, "pass %s", activeStep.label);
             if (activeStep.type === types.ROOT) {
-                reportProgress();
                 api.stop();
-                return;
+                change(events.DONE);//finished all tests.
             }
         } else if (activeStep.time > activeStep.maxTime) {
             expire(activeStep);
@@ -146,26 +146,7 @@ function runner(api) {
             api.stop();
             return;
         }
-        api.dispatch(events.STEP_END, activeStep, activePath.getPath());
         next();
-    }
-
-    function reportProgress() {
-        //TODO: break up into just id's and progress for each.
-        var changes = activePath.getProgressChanges(), list = [], exportData;
-        exports.each(changes, function (step) {
-            var item = {uid: step.uid, progress: step.progress};
-            if (step.type === types.ROOT) {
-                item.timeLeft = step.timeLeft = activePath.getTime();
-            }
-            list.push(item);
-        });
-        api.dispatch(events.PROGRESS, changes);
-        exportData = exportStep(rootStep);
-//        console.log("EXPORT: %o", exportData);
-        var myDiff = exports.data.diff(diffRoot, exportData);//, diffRoot || {});
-        console.log("DIFF: %o", myDiff);
-        diffRoot = exportData;
     }
 
     function expire(step) {
@@ -193,6 +174,10 @@ function runner(api) {
         return step;
     }
 
+    function change(evt) {
+        differ.fire(evt);
+    }
+
     api.types = types;
     api.start = start;
     api.stop = stop;
@@ -200,6 +185,15 @@ function runner(api) {
     api.reset = reset;
     api.getSteps = getSteps;
     api.setSteps = setSteps;
+    api.getRoot = function () {
+        return exportStep(rootStep);
+    };
+    api.getCurrentStep = function () {
+        return activePath.getSelected();
+    };
+    api.getLastStep = function () {
+        return activePath.getLastStep();
+    };
 
     return api;
 }

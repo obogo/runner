@@ -1,5 +1,5 @@
 function Path() {
-    var selected, root, values = [], prop = 'children', pendingProgressChanges;
+    var selected, root, values = [], prop = 'children', pendingProgressChanges, lastStep;
 
     function setData(rootStep) {
         selected = root = rootStep;
@@ -67,7 +67,7 @@ function Path() {
         var parent, path = uidToPath(step), i = 0, len = path.length;
         parent = getStepFromPath(path, 0, root, -1);
         if (parent) {
-            parent.childIndex = path[len - 1];
+            parent.childIndex = path[len - 1] || 0;
         }
         values.length = 0;
         while (i < len) {
@@ -157,6 +157,9 @@ function Path() {
     function getProgressChanges(step, changed) {
         changed = changed || (pendingProgressChanges && pendingProgressChanges.slice()) || [];
         step = step || getSelected();
+        if (!step) {
+            return;// there is no selected step.
+        }
         if (pendingProgressChanges) {
             pendingProgressChanges = null;
         }
@@ -284,7 +287,13 @@ function Path() {
     this.setData = setData;
     this.setPath = setPath;
     this.getDepth = getDepth;
-    this.next = next;
+    this.next = function () {
+        lastStep = getSelected();
+        return next();
+    };
+    this.getLastStep = function () {
+        return lastStep;
+    };
     this.getSelected = getSelected;
     this.getPath = getPath;
     this.getProgressChanges = getProgressChanges;

@@ -1,176 +1,226 @@
 <!DOCTYPE html>
-<html data-ng-app="app">
+<html>
 <head>
-    <title>Test</title>
-    <style type="text/css">
-        html, body {
-            width: 100%;
-            height: 100%;
-            margin: 0px;
-            padding: 0px;
-        }
+<title>Test</title>
+<link rel="stylesheet" href="css/ux-jsonview.css"/>
+<style type="text/css">
+    html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0px;
+        padding: 0px;
+    }
 
-        .label {
-            display: block;
-            width: 200px;
-            height: 20px;
-            overflow: hidden;
-            font-size: 12px;
-        }
+    .client {
+        position: absolute;
+        left: 0px;
+        top: 0px;
+        right: 50%;
+        bottom: 0px;
+        background-color: #efefef;
+        border: 1px solid #000000;
+        color: #333333;
+        overflow: auto;
+    }
 
-        .bar {
-            display: block;
-            width: 200px;
-            border: 1px solid #000000;
-        }
+    .admin {
+        position: absolute;
+        left: 50%;
+        top: 0px;
+        right: 0px;
+        bottom: 0px;
+        background-color: #CCCCCC;
+        border: 1px solid #FFFFFF;
+        color: #000000;
+        overflow: auto;
+    }
 
-        .bar .progress {
-            background: #369;
-            height: 16px;
+    .title {
+        text-align: center;
+    }
+
+    .label {
+        display: block;
+        width: 200px;
+        height: 20px;
+        overflow: hidden;
+        font-size: 12px;
+    }
+
+    .bar {
+        display: block;
+        width: 200px;
+        border: 1px solid #000000;
+    }
+
+    .bar .progress {
+        background: #369;
+        height: 16px;
+    }
+</style>
+<script src="js/lib/angular.js"></script>
+<script src="js/go-runner-client.js"></script>
+<script src="js/ux-jsonview.js"></script>
+<script>
+    var socket = {
+        // toAdmin
+        admin: null,
+        client: null,
+        to: function (event) {
+            this.admin.$broadcast.apply(this.admin, arguments);
+            this.admin.$apply();
+            var difference = go.data.diff(go.runner.getRoot(), go.getData());
+            if (difference) {
+                go.runner.stop();
+                console.warn('STOP: DATA NOT THE SAME: DIFF = %o', difference);
+            }
+        },
+        // fromAdmin
+        from: function (event) {
+            this.client.$broadcast.apply(this.client, arguments);
+            this.client.$apply();
         }
-    </style>
-    <script src="../../tmp/lib/angular.js"></script>
-    <script src="../../tmp/build/ux-runner.js"></script>
-    <script>
-        angular.module('app', []).controller('progress', function ($scope) {
-            var dictionary = {};
-            $scope.items = [];
-            $scope.getIndent = function (step) {
-                return step.uid.split('.').length;
-            };
-            $scope.getColor = function (step) {
-                var percent = step.time / step.expectedTime;
-                if (percent < 1) {
-                    return '#009900';
-                } else if (percent < 1.25) {
-                    return '#33CC00';
-                } else if (percent < 1.5) {
-                    return '#FFFF00';
-                } else if (percent < 2) {
-                    return '#FF9900';
-                } else if (percent < step.maxTime) {
-                    return '#FF6600';
-                } else {
-                    return '#FF0000';
-                }
-            };
-            ux.each(ux.runner.events, function (eventName) {
-                if (eventName === ux.runner.events.PROGRESS) {
-                    ux.runner.on(eventName, function (event, progresses) {
-                        $scope.items = progresses;
-                        ux.each(progresses, function (item) {
-                            if (!dictionary[item.uid]) {
-                                dictionary[item.uid] = item;
-                            }
-                            dictionary[item.uid].progress = item.progress;
-                            console.log("\t%c%s: %d%", "color:#090", item.uid, Math.round(item.progress * 100));
-                        });
-                        $scope.items.length = 0;
-                        ux.each(dictionary, function (item) {
-                            $scope.items.push(item);
-                        });
-                        $scope.items.sort(function (a, b) {
-                            return a.uid > b.uid ? 1 : -1;
-                        });
-                        $scope.timeLeft = dictionary['R'].timeLeft;
-                        $scope.$apply();
-                    });
-                } else {
-//                    ux.runner.on(eventName, function (event) {
-//                        console.log("EVENT %s:%s, %o", eventName, arguments[1].uid, ux.util.array.toArray(arguments));
-//                    });
-                }
-            });
-            ux.runner.on(ux.runner.events.RESET, function (event, root) {
-                $scope.items.length = 0;
-                dictionary = {};
-                $scope.timeLeft = root.timeLeft;
+    };
+</script>
+<script>
+    angular.module('client', ['ux']).controller('progress', function ($scope) {
+        var dictionary = {};
+        $scope.items = [];
+        socket.client = $scope.$root;
+        $scope.getIndent = function (step) {
+            return step.uid.split('.').length;
+        };
+        $scope.getColor = function (step) {
+            var percent = step.time / step.expectedTime;
+            if (percent < 1) {
+                return '#009900';
+            } else if (percent < 1.25) {
+                return '#33CC00';
+            } else if (percent < 1.5) {
+                return '#FFFF00';
+            } else if (percent < 2) {
+                return '#FF9900';
+            } else if (percent < step.maxTime) {
+                return '#FF6600';
+            } else {
+                return '#FF0000';
+            }
+        };
+        go.each(go.runner.events, function (eventName) {
+            go.runner.on(eventName, function (event) {
+                $scope.data = go.runner.getRoot();
                 $scope.$apply();
+                socket.to.apply(socket, arguments);
+//                        console.log("EVENT %s:%s, %o", eventName, arguments[1].uid, go.util.array.toArray(arguments));
             });
-//            ux.runner.setSteps([
-//                {type:"if", label:"0", children:[{label:"0.0"}], override: 'skip'},
-//                {type:"elseif", label:"1", children:[{label:"1.0"}], override: 'skip'},
-//                {type:"else", label:"2", children:[{label:"2.0"}]},
-//            ]);
-//            setTimeout(ux.runner.start);//, 0, '0.1');//();//'0.1');
         });
+        go.runner.on(go.runner.events.RESET, function (event, root) {
+            $scope.items.length = 0;
+            $scope.data = go.runner.getRoot();
+            $scope.$apply();
+        });
+        $scope.data = go.runner.getRoot();
+    });
 
-        function setSimpleSteps() {
-            ux.runner.setSteps([
-                {type:"if", label:"0", children:[{label:"0.0"}], override: 'skip'},
-                {type:"elseif", label:"1", children:[{label:"1.0"}], override: 'skip'},
-                {type:"else", label:"2", children:[{label:"2.0"}]},
-            ]);
-        }
+    function setSimpleSteps() {
+        go.runner.setSteps([
+            {type: "if", label: "0", children: [
+                {label: "0.0"}
+            ], override: 'skip'},
+            {type: "elseif", label: "1", children: [
+                {label: "1.0"}
+            ], override: 'skip'},
+            {type: "else", label: "2", children: [
+                {type: "find", data: "a", label: "2.0"},
+                {type: "findText", label: "2.1"},
+                {type: "expect", data:"Small Import", label: "2.1"}
+            ]},
+        ]);
+    }
 
-        function setSteps() {
-            ux.runner.setSteps(
-                    [
-                        {
-                            label: '0',
-                            children: [
-                                {label: '0.0', children: [
-                                    {label: '0.0.0', type: 'find'},
-                                    {label: '0.0.1'}
+    function setSteps() {
+        go.runner.setSteps(
+                [
+                    {
+                        label: '0',
+                        children: [
+                            {label: '0.0', children: [
+                                {label: '0.0.0', type: 'find'},
+                                {label: '0.0.1'}
+                            ]},
+                            {label: '0.1', children: [
+                                {label: '0.1.0'},
+                                {label: '0.1.1'},
+                                {type: 'if', data: "i > 0", label: '0.1.2', children: [
+                                    {label: '0.1.2.0'}
                                 ]},
-                                {label: '0.1', children: [
-                                    {label: '0.1.0'},
-                                    {label: '0.1.1'},
-                                    {type: 'if', data: "i > 0", label: '0.1.2', children: [
-                                        {label: '0.1.2.0'}
-                                    ]},
-                                    {type: 'elseif', label: '0.1.3', children: [
-                                        {label: '0.1.3.0'}
-                                    ]},
-                                    {type: 'else', label: '0.1.4', children: [
-                                        {label: '0.1.4.0'}
-                                    ]},
-                                    {type: 'if', label: '0.1.5', children: [
-                                        {label: '0.1.5.0'}
-                                    ]},
-                                    {type: 'find', label: '0.1.6'},
+                                {type: 'elseif', label: '0.1.3', children: [
+                                    {label: '0.1.3.0'}
                                 ]},
-                                {label: '0.2', children: [
-                                    {label: '0.2.0'},
-                                    {label: '0.2.1'}
+                                {type: 'else', label: '0.1.4', children: [
+                                    {label: '0.1.4.0'}
                                 ]},
-                                {label: '0.3', children: [
-                                    {label: '0.3.0'},
-                                    {label: '0.3.1'},
-                                    {label: '0.3.2'},
-                                    {label: '0.3.3'},
-                                    {label: '0.3.4'},
-                                    {label: '0.3.5'},
-                                    {label: '0.3.6'},
-                                    {label: '0.3.7'},
-                                    {label: '0.3.8'},
-                                    {label: '0.3.9'},
-                                    {label: '0.3.10'},
-                                    {label: '0.3.11'},
-                                    {label: '0.3.12'}
+                                {type: 'if', label: '0.1.5', children: [
+                                    {label: '0.1.5.0'}
                                 ]},
-                            ]
-                        }
-                    ]);
-        }
-    </script>
+                                {type: 'find', label: '0.1.6'},
+                            ]},
+                            {label: '0.2', children: [
+                                {label: '0.2.0'},
+                                {label: '0.2.1'}
+                            ]},
+                            {label: '0.3', children: [
+                                {label: '0.3.0'},
+                                {label: '0.3.1'},
+                                {label: '0.3.2'},
+                                {label: '0.3.3'},
+                                {label: '0.3.4'},
+                                {label: '0.3.5'},
+                                {label: '0.3.6'},
+                                {label: '0.3.7'},
+                                {label: '0.3.8'},
+                                {label: '0.3.9'},
+                                {label: '0.3.10'},
+                                {label: '0.3.11'},
+                                {label: '0.3.12'}
+                            ]},
+                        ]
+                    }
+                ]);
+    }
+</script>
+<script src="../admin/js/go-runner-admin.js"></script>
+<script>
+    angular.element(document).ready(function () {
+        angular.bootstrap(document.querySelectorAll('.client')[0], ['client']);
+        angular.bootstrap(document.querySelectorAll('.admin')[0], ['admin']);
+    });
+</script>
 </head>
 <body>
-<div data-ng-controller="progress">
-    <div>
-        <a href="javascript:setSimpleSteps()">Small Import</a>
-        <a href="javascript:setSteps()">Large Import</a>
+<!--// CLIENT //-->
+<div class="client">
+    <div class="title">Client</div>
+    <div data-ng-controller="progress">
+        <div>
+            <a href="javascript:setSimpleSteps()">Small Import</a>
+            <a href="javascript:setSteps()">Large Import</a>
+            <input id="startUID" type="text" value="">
+            <a href="javascript:go.runner.start(document.getElementById('startUID').value)">Start</a>
+            <a href="javascript:go.runner.reset()">Reset</a>
+            <span>time:{{data.timeLeft}}s</span>
+        </div>
+        <div class="testbed">
+            <div cl
+        </div>
+        <div ux-jsonview="{showPaths:true}" data-ng-model="data"></div>
     </div>
-    <div>
-        <input id="startUID" type="text" value="">
-        <a href="javascript:ux.runner.start(document.getElementById('startUID').value)">Start</a>
-        <a href="javascript:ux.runner.reset()">Reset</a>
-    </div>
-    time left: estimate:{{timeLeft}}s<br/>
-
-    <div data-ng-repeat="item in items" class="bar">
-        <div class="label">{{item.uid}}:{{item.type}}::{{item.status}}, {{item.state}}</div>
-        <div class="progress" style="width:{{item.progress*100}}%;background-color:{{getColor(item)}};"></div>
+</div>
+<!--// ADMIN -->
+<div class="admin">
+    <div class="title">Admin</div>
+    <div data-ng-controller="myController">
+        <div ux-jsonview="{showPaths:true}" data-ng-model="sampleData"></div>
     </div>
 </div>
 </body>

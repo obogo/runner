@@ -5,10 +5,8 @@ MethodAPI.prototype[types.STEP] = function (step) {
     return statuses.PASS;
 };
 MethodAPI.prototype[types.ROOT] = MethodAPI.prototype[types.STEP];
-MethodAPI.prototype[types.FIND] = function (step) {
-    return statuses.PASS;
-};
 MethodAPI.prototype[types.IF] = function (step) {
+
 //    if (step.time > step.maxTime * 0.5) {
         return step.override || statuses.PASS;
 //    } else {

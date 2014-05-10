@@ -1,4 +1,4 @@
-var justInTimeOnly = {$$hashKey:true},
+var justInTimeOnly = {$$hashKey:true, element: true},
     omitOnSave = {$$hashKey:true, uid:true, index:true, state:true, status:true, progress:true, time:true, startTime: true, endTime:true};
 
 /**
@@ -56,20 +56,17 @@ function exportStep(step, clearJIT) {
  * @returns {{}}
  */
 function _exportSteps(step, index, list, outList, omits) {
-    var out = {}, defaultProps, i = 0, iLen = step.children.length, prop;
-    while (i < iLen) {
-        defaultProps = defaults[step.type];
-        for (prop in step) {
-            if (omits[prop]) {
-                // do not add it.
-            } else if (prop === "children") {
-                out[prop] = {length: step.children.length};
-                exports.each(step.children, _exportSteps, out[prop], omits);
-            } else if (step.hasOwnProperty(prop) && defaultProps[prop] !== step[prop]) {
-                out[prop] = step[prop];
-            }
+    var out = {}, defaultProps, prop;
+    defaultProps = defaults[step.type];
+    for (prop in step) {
+        if (omits[prop]) {
+            // do not add it.
+        } else if (prop === "children") {
+            out[prop] = {length: step.children.length};
+            exports.each(step.children, _exportSteps, out[prop], omits);
+        } else if (step.hasOwnProperty(prop) && defaultProps[prop] !== step[prop]) {
+            out[prop] = step[prop];
         }
-        i += 1;
     }
     if (outList) {
         outList[index] = out;
