@@ -1,5 +1,5 @@
 function Path() {
-    var selected, root, values = [], prop = 'children', pendingProgressChanges, lastStep;
+    var selected, root, values = [], pendingProgressChanges, lastStep;
 
     function setData(rootStep) {
         selected = root = rootStep;
@@ -11,7 +11,7 @@ function Path() {
             csl.log(step, "%s.childIndex = %s", step.label, pathIndex);
             pathIndex = parseInt(pathIndex, 10);
             step.childIndex = pathIndex;
-            step = step[prop][pathIndex];
+            step = step[stepsProp][pathIndex];
             values.push(pathIndex);
             selected = step;
             selected.state = states.ENTERING;
@@ -79,12 +79,12 @@ function Path() {
     }
 
     function selectNextChild() {
-        var len = selected.children.length;
+        var len = selected[stepsProp].length;
         if (selected.status === statuses.SKIP || selected.childIndex >= len) {
             return false;
         }
         if (len && selected.childIndex + 1 < len) {
-            select(selected.children[selected.childIndex + 1]);
+            select(selected[stepsProp][selected.childIndex + 1]);
             csl.log(selected, "%cgetNextChild: %s", "color:#F90", selected.label);
             return true;
         }
@@ -124,8 +124,8 @@ function Path() {
         if (index >= path.length + end) {
             return step;
         }
-        if (pathIndex !== undefined && step.children[pathIndex]) {
-            step = step.children[pathIndex];
+        if (pathIndex !== undefined && step[stepsProp][pathIndex]) {
+            step = step[stepsProp][pathIndex];
             return getStepFromPath(path, index + 1, step, end);
         }
         return null;
@@ -144,9 +144,9 @@ function Path() {
 
     function _getAllProgress(step, index, list, changed) {
         if (step.status === statuses.SKIP) {
-            exports.each(step.children, skipStep);
+            exports.each(step[stepsProp], skipStep);
         }
-        exports.each(step.children, _getAllProgress, changed);
+        exports.each(step[stepsProp], _getAllProgress, changed);
         updateProgress(step, changed);
     }
 //
@@ -184,13 +184,13 @@ function Path() {
         if (step.state === states.COMPLETE) {
             step.progress = 1;
         } else {
-            len = step.children.length;
+            len = step[stepsProp].length;
             if (len && step.childIndex !== -1) {
                 childProgress = 0;
                 step.skipCount = 0;
                 while (i <= step.childIndex && i < len) {
-                    if (step.children[i].status != statuses.SKIP) {
-                        childProgress += step.children[i].progress;
+                    if (step[stepsProp][i].status != statuses.SKIP) {
+                        childProgress += step[stepsProp][i].progress;
                     } else {
                         step.skipCount += 1;
                     }
@@ -204,7 +204,7 @@ function Path() {
         }
         changed.push(step);
     }
-
+//TODO: This skip block logic needs to be refactored. The condition.js should handle this skip.
     function skipBlock() {
         if (selected.type === types.IF || selected.type === types.ELSEIF || selected.type === types.ELSE) {
             var parent = getStepFromPath(values, 0, root, -1);
@@ -220,7 +220,7 @@ function Path() {
     function skipPreDependentChildCondition(parent) {
         var j = parent.childIndex - 1, jLen = 0;
         while (j >= jLen) {
-            var s = parent.children[j];
+            var s = parent[stepsProp][j];
             if (s.type === types.IF || s.type === types.ELSEIF) {
                 skipStep(s);
             } else {
@@ -231,9 +231,9 @@ function Path() {
     }
 
     function skipPostDependentCondition(parent) {
-        var i = parent.childIndex + 1, iLen = parent.children.length;
+        var i = parent.childIndex + 1, iLen = parent[stepsProp].length;
         while (i < iLen) {
-            var s = parent.children[i];
+            var s = parent[stepsProp][i];
             if (s.type === types.ELSEIF || s.type === types.ELSE) {
                 skipStep(s);
             } else {
@@ -266,10 +266,10 @@ function Path() {
     }
 
     function getStepTime(step) {
-        var complete = 0, total = 0, time = 0, totalTime = 0, result, i = 0, iLen = step.children.length;
+        var complete = 0, total = 0, time = 0, totalTime = 0, result, i = 0, iLen = step[stepsProp].length;
         while (i < iLen) {
-            if (step.children.length) {
-                result = getStepTime(step.children[i]);
+            if (step[stepsProp].length) {
+                result = getStepTime(step[stepsProp][i]);
                 complete += result.complete;
                 total += result.total;
                 time += result.time;
@@ -301,4 +301,5 @@ function Path() {
     this.skipBlock = skipBlock;
     this.isCondition = isCondition;
     this.getTime = getTime;
+    this.getParent = getParentFrom;
 }

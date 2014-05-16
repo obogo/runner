@@ -9,12 +9,12 @@ function runner(api) {
         },
         intv,
         _steps,
-        rootStep = importStep({uid:rootPrefix, label:types.ROOT, type:types.ROOT, children:[], index: -1, maxTime: 100}),
+        rootStep = importStep({uid:rootPrefix, label:types.ROOT, type:types.ROOT, index: -1, maxTime: 100}),
 //        diffRoot,
         differ = diffThrottle(api, rootStep, activePath, 1000);
 
     function getSteps() {
-        return rootStep.children;
+        return rootStep[stepsProp];
     }
 
     function setSteps(steps) {
@@ -25,13 +25,14 @@ function runner(api) {
     function reset() {
         stop();
         applySteps(_steps);
+        updateTime(rootStep);
         rootStep.timeLeft = activePath.getTime();
         change(events.RESET);
     }
 
     function applySteps(steps) {
         var mySteps = exports.each(steps.slice(), importStep, rootPrefix);
-        rootStep.children = mySteps;
+        rootStep[stepsProp] = mySteps;
         csl.log(rootStep, '');
         activePath.setData(rootStep);
     }
@@ -81,6 +82,7 @@ function runner(api) {
         var activeStep = activePath.getSelected();
         csl.log(activeStep, "run %s state:%s", activeStep.label, activeStep.state);
         // conditionals exec first. others exec last.
+        updateTime(activeStep);
         if (activePath.isCondition(activeStep)) {
             if (activeStep.status === statuses.SKIP) {
                 activeStep.progress = 0;
@@ -88,22 +90,22 @@ function runner(api) {
             } else if (activeStep.state === states.COMPLETE) {
                 next();
             } else if (activeStep.status !== statuses.PASS) {
-                exec(activeStep);
-            } else if (activeStep.children.length && activeStep.childIndex < activeStep.children.length - 1) {
+                exec(activeStep, checkDependency(activeStep));
+            } else if (activeStep[stepsProp].length && activeStep.childIndex < activeStep[stepsProp].length - 1) {
                 next();
-            } else if (activeStep.time < activeStep.maxTime) {
+            } else if (isExpired(activeStep)) {
                 activeStep.state = states.COMPLETE;
                 completeStep(activeStep);
             } else {
                 expire(activeStep);
             }
         } else {
-            if (activeStep.children.length && activeStep.childIndex === -1) {
+            if (activeStep[stepsProp].length && activeStep.childIndex === -1) {
                 activePath.next();
             } else if (activeStep.state === states.COMPLETE) {
                 completeStep(activeStep);
-            } else if (activeStep.time < activeStep.maxTime) {
-                exec(activeStep);
+            } else if (!isExpired(activeStep)) {
+                exec(activeStep, checkDependency(activeStep));
             } else {
                 expire(activeStep);
             }
@@ -111,20 +113,38 @@ function runner(api) {
         if (!intv) {
             return;
         }
+        updateTime(activeStep);
         change(events.UPDATE);
         go();
     }
 
     function next() {
+        updateTime(activePath.getSelected());
         activePath.next();
         change();
     }
 
-    function exec(activeStep) {
+    function isExpired(step) {
+        return step.execCount * step.increment > step.maxTime;
+    }
+
+    function checkDependency(activeStep) {
+        var result;
+        if (MethodAPI.prototype[activeStep.type + dependencyProp]) {
+            result = MethodAPI.prototype[activeStep.type + dependencyProp](activeStep);
+            if (result) {
+                return result;
+            }
+            throw new Error("Dependency Failure: \"" + activeStep + "\" unable to fetch dependency.");
+        }
+        return;
+    }
+
+    function exec(activeStep, dependency) {
         activeStep.state = states.RUNNING;
         csl.log(activeStep, "run method %s", activeStep.type);
-        activeStep.status = methods[activeStep.type](activeStep);
-        updateTime(activeStep);
+        activeStep.status = methods[activeStep.type](activeStep, dependency);
+        activeStep.execCount += 1;
         if (activeStep.status === statuses.PASS) {
             activeStep.state = states.COMPLETE;
             activePath.skipBlock();
@@ -133,14 +153,12 @@ function runner(api) {
                 api.stop();
                 change(events.DONE);//finished all tests.
             }
-        } else if (activeStep.time > activeStep.maxTime) {
+        } else if (isExpired(activeStep)) {
             expire(activeStep);
         }
     }
 
     function completeStep(activeStep) {
-        activeStep.endTime = Date.now();
-        updateTime(activeStep);
         csl.log(activeStep, "complete %s", activeStep.label);
         if (activeStep.type === types.ROOT) {
             api.stop();
@@ -158,8 +176,9 @@ function runner(api) {
     }
 
     function updateTime(step) {
-        if (!step.startTime) step.startTime = Date.now();
-        step.time = Date.now() - step.startTime;
+        var now = Date.now();
+        if (!step.startTime) step.startTime = now;
+        step.time = now - step.startTime;
         csl.log(activePath.getSelected(), "updateTime %s %s/%s", step.label, step.time, step.maxTime);
     }
 
@@ -167,8 +186,8 @@ function runner(api) {
         step = step || rootStep;
         index = index || 0;
         var pathIndex = path[index];
-        if (pathIndex !== undefined && step.children[pathIndex]) {
-            step = step.children[pathIndex];
+        if (pathIndex !== undefined && step[stepsProp][pathIndex]) {
+            step = step[stepsProp][pathIndex];
             return getStepFromPath(path, index + 1, step);
         }
         return step;
@@ -179,14 +198,40 @@ function runner(api) {
     }
 
     api.types = types;
+    api.states = states;
+    api.statuses = statuses;
+    api.register = register;
     api.start = start;
     api.stop = stop;
     api.resume = resume;
     api.reset = reset;
     api.getSteps = getSteps;
     api.setSteps = setSteps;
+    api.getParent = activePath.getParent;
+    api.getParentOfType = function (step, type) {
+        var parent = ex.getParent(step);
+        while (parent.type !== type && parent.type !== types.ROOT) {
+            parent = ex.getParent(parent);
+        }
+        if (parent.type === type) {
+            return parent;
+        }
+        return null;
+    };
+    api.getPrevSibling = function (step) {
+        var parent = api.getParent(step),
+            prev = parent[stepsProp][step.index - 1];
+        return prev;
+    };
+    api.getNextSibling = function (step) {
+        var parent = api.getParent(step),
+            nxt = parent[stepsProp][step.index + 1];
+        return nxt;
+    };
     api.getRoot = function () {
-        return exportStep(rootStep);
+        api.exportRoot = api.exportRoot || {};
+        exportStep(rootStep, null, api.exportRoot);
+        return api.exportRoot;
     };
     api.getCurrentStep = function () {
         return activePath.getSelected();

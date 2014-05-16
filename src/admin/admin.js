@@ -9,7 +9,11 @@ myApp.controller('myController', function ($scope) {
             var args = go.util.array.toArray(arguments);
             args[0] = args[0].name;
             _.extend(data, arguments[1]);
-            $scope.sampleData.root = data;
+            if (!$scope.sampleData.root) {
+                $scope.sampleData.root = data;
+            } else {
+                go.extend($scope.sampleData.root, data);
+            }
             $scope.sampleData.events.push(args);
         });
     });

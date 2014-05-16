@@ -1,3 +1,6 @@
+BUSINESS PLAN
+http://www.9kdesigns.com/resources/starting-an-online-business-essential-tools
+
 ** NEED TO GET FocusGroup query selector updates pulled out and put into a module. It makes document.querySelectorAll faster. **
 
 still need frames because otherwise we cannot keep the runner running when the page changes.
@@ -93,3 +96,25 @@ TODO:
 
 COMPETITORS:
     http://speedcurve.com/ - page load speeds. uses Google Page Speed (https://developers.google.com/speed/pagespeed/). (Nice colors)
+
+
+STRUCTURE:
+    scenario: A full set of steps that can be selected to run from the main menu. This is the only scope for which a test can be run because it can have variables.
+    series: A reusable set of steps. It can also be used as a macro.
+    set: Sets a value on a scenario. Even if inside a series it goes to the scenario.
+
+PROBLEMS:
+    Shadow Dom. (Polimer Objects) (Can we simulate a click with the capture event and offset of the x,y on the item)
+                [5/14/14, 5:28:10 PM] Robert Taylor: ok, talked with monty, he said it is possible to inspect the shadow DOM but didn't know the javascript function, he said it is something like element.shadowRoot.query(....) but we will need to find out and test it
+                [5/14/14, 5:28:28 PM] Robert Taylor: also in looking found some other links for reference...
+                [5/14/14, 5:28:41 PM] Robert Taylor: http://www.html5rocks.com/en/tutorials/webcomponents/shadowdom/
+                [5/14/14, 5:29:35 PM] Robert Taylor: http://html5-demos.appspot.com/static/shadowdom-visualizer/index.html
+                [5/14/14, 5:29:43 PM] Robert Taylor: https://github.com/josscrowcroft/Simple-JavaScript-DOM-Inspector
+                [5/14/14, 5:32:19 PM] Robert Taylor: https://www.youtube.com/watch?v=2-oQj9Y9I6I
+                [5/14/14, 5:33:32 PM] Robert Taylor: this may be what we are looking for re: Shadow DOM inspection
+                https://groups.google.com/a/dartlang.org/forum/#!topic/web-ui/q3ncasZ27j4
+                [5/14/14, 5:34:15 PM] Robert Taylor: its dart? not sure if works in JS
+    Canvas - Need to be able to select and build selectors.
+    SVG - it is dom. We should be able to build a selector.
+    Flash
+    Applets

@@ -1,28 +1,6 @@
 function MethodAPI(dispatcher) {
     this.dispatcher = dispatcher;
 }
-MethodAPI.prototype[types.STEP] = function (step) {
-    return statuses.PASS;
-};
-MethodAPI.prototype[types.ROOT] = MethodAPI.prototype[types.STEP];
-MethodAPI.prototype[types.IF] = function (step) {
-
-//    if (step.time > step.maxTime * 0.5) {
-        return step.override || statuses.PASS;
-//    } else {
-//        return states.FAIL;
-//    }
-//    step.state = states.COMPLETE;
-};
-MethodAPI.prototype[types.ELSEIF] = function (step) {
-    return step.override || statuses.PASS;
-//    step.state = states.COMPLETE;
-};
-MethodAPI.prototype[types.ELSE] = function (step) {
-    return step.override || statuses.PASS;
-//    step.state = states.COMPLETE;
-};
-
 
 /**
  * Fire an event handler to the specified node. Event handlers can detect that the event was fired programatically

@@ -6,7 +6,8 @@ module.exports = function (grunt) {
             '* (c) ' + new Date().getFullYear() + ', Obogo\n' +
             '* License: Obogo 2014. All Rights Reserved.\n' +
             '*/\n',
-        wrapStart: '(function(exports, global){\n',
+        // define the ux here so that parser is scoped internally.
+        wrapStart: '(function(exports, global){\n"use strict";\n',
         wrapEnd: '\n}(this.<%= pkg.packageName %> = this.<%= pkg.packageName %> || {}, function() {return this;}()));\n',
         jshint: {
             // define the files to lint
@@ -17,7 +18,7 @@ module.exports = function (grunt) {
                 globals: {
 //                    loopfunc: function (name) {} // uglify may have one too.
                 },
-                ignores: []
+                ignores: ['lib/parser/ux-parser.js']
             }
         },
         uglify: {
@@ -41,17 +42,23 @@ module.exports = function (grunt) {
                         'lib/ux-each.js',
                         'lib/ux-extend.js',
                         'lib/data/_.js',
-                        'lib/data/dataManager.js',
+                        'lib/data/Inspector.js',
                         'lib/data/diff.js',
                         'client/runner/log.js',
                         'client/runner/types.js',
-                        'client/runner/step.js',
                         'client/runner/MethodAPI.js',
                         'client/runner/methods/*.js',
                         'client/runner/Path.js',
                         'client/runner/diffThrottle.js',
+                        'client/runner/register.js',
+                        'client/runner/types/step.js',
+                        'client/runner/types/root.js',
+                        'client/runner/types/**/*.js',
                         'client/runner/runner.js',
-                        'lib/ux-selector.js'
+                        'client/runner/step.js',
+                        'lib/ux-selector.js',
+                        'lib/parser/ux-parser.js',
+                        'lib/parser/xml2json.js'
 //                        'src/recorder.js',
                     ],
                     '../public/admin/js/<%= pkg.packageName %>-<%= pkg.filename %>-admin.js': [

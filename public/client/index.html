@@ -57,6 +57,29 @@
         background: #369;
         height: 16px;
     }
+
+    .import {
+        width: 100%;
+    }
+
+    .importXML {
+        position: absolute;
+        top: 20px;
+        right: 0px;
+        width: 400px;
+        height: 200px;
+        z-index: 2;
+    }
+
+    .testbed {
+        position: absolute;
+        width: 400px;
+        height: 600px;
+        top: 180px;
+        right: 0px;
+        border: 1px solid #000000;
+        background: #ffffff;
+    }
 </style>
 <script src="js/lib/angular.js"></script>
 <script src="js/go-runner-client.js"></script>
@@ -108,32 +131,85 @@
         };
         go.each(go.runner.events, function (eventName) {
             go.runner.on(eventName, function (event) {
-                $scope.data = go.runner.getRoot();
-                $scope.$apply();
+                go.extend($scope.data, go.runner.getRoot);
+                safeApply();
                 socket.to.apply(socket, arguments);
 //                        console.log("EVENT %s:%s, %o", eventName, arguments[1].uid, go.util.array.toArray(arguments));
             });
         });
-        go.runner.on(go.runner.events.RESET, function (event, root) {
-            $scope.items.length = 0;
-            $scope.data = go.runner.getRoot();
-            $scope.$apply();
-        });
+//        go.runner.on(go.runner.events.RESET, function (event, root) {
+//            $scope.items.length = 0;
+//            $scope.data = go.runner.getRoot();
+//            safeApply();
+//        });;
+
+
+        $scope.setSimpleXML = function () {
+            $scope.xmlData = '<?xml version="1.0" encoding="utf-8" ?>\
+            <scenario name="test1">\
+                <set property="a">1</set>\
+                <set property="b">1</set>\
+                <if condition="a > test1::b">\
+                    <set property="c">2</set>\
+                    <if condition="a === b">\
+                        <set property="a">2</set>\
+                    </if>\
+                    <find query="a:eq(0)">\
+                        <click/>\
+                    </find>\
+                </if>\
+                <elseif condition="b > a">\
+                    <step></step>\
+                </elseif>\
+                <else>\
+                    <find query="a">\
+                        <val></val>\
+                        <toBe>Small Import</toBe>\
+                    </find>\
+                </else>\
+                <!--// this is a private scenario because it is defined inside another scenario //-->\
+                <scenario name="scn1">\
+                    <!--// can only set properties on this series. Cannot set properties above //-->\
+                    <set property="a"></set>\
+                </scenario>\
+                <run name="run-scn1" scenario="scn1"></run>\
+                <find selector=".menu:eq(1)">\
+                    <click></click>\
+                </find>\
+                <if condition="run-scn1::a"></if>\
+                <run scenario="scn2"></run>\
+            </scenario>';
+        };
+
+        $scope.parseXML = function () {
+//            var xml = go.runner.parse.text2xml($scope.xmlData);
+//            console.log(xml);
+            var steps = go.runner.parse.parse($scope.xmlData);
+            console.log(steps);
+            go.runner.setSteps([steps]);
+        };
         $scope.data = go.runner.getRoot();
+
+
+        function safeApply() {
+            if (!$scope.$$phase) {
+                $scope.$apply();
+            }
+        }
     });
 
     function setSimpleSteps() {
         go.runner.setSteps([
-            {type: "if", label: "0", children: [
+            {type: "if", label: "0", steps: [
                 {label: "0.0"}
             ], override: 'skip'},
-            {type: "elseif", label: "1", children: [
+            {type: "elseif", label: "1", steps: [
                 {label: "1.0"}
             ], override: 'skip'},
-            {type: "else", label: "2", children: [
+            {type: "else", label: "2", steps: [
                 {type: "find", data: "a", label: "2.0"},
                 {type: "findText", label: "2.1"},
-                {type: "expect", data:"Small Import", label: "2.1"}
+                {type: "expect", data: "Small Import", label: "2.1"}
             ]},
         ]);
     }
@@ -202,16 +278,26 @@
 <div class="client">
     <div class="title">Client</div>
     <div data-ng-controller="progress">
-        <div>
+        <div class="import">
             <a href="javascript:setSimpleSteps()">Small Import</a>
             <a href="javascript:setSteps()">Large Import</a>
+
+            <div class="importXML">
+                <label>Import:</label>
+                <a href="" data-ng-click="setSimpleXML()">Simple XML</a>
+                <a href="" data-ng-click="parseXML()" style="float:right;">Parse XML</a>
+                <textarea id="importXML" data-ng-model="xmlData" rows="10" cols="54"></textarea>
+            </div>
+        </div>
+        <div>
+            <label for="startUID">Start UID</label>
             <input id="startUID" type="text" value="">
             <a href="javascript:go.runner.start(document.getElementById('startUID').value)">Start</a>
             <a href="javascript:go.runner.reset()">Reset</a>
             <span>time:{{data.timeLeft}}s</span>
         </div>
         <div class="testbed">
-            <div cl
+            <div></div>
         </div>
         <div ux-jsonview="{showPaths:true}" data-ng-model="data"></div>
     </div>

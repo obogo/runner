@@ -4,6 +4,7 @@
 * License: Obogo 2014. All Rights Reserved.
 */
 (function(exports, global){
+"use strict";
 var ex = exports.runner = exports.runner || {};
 
 ex.events = {
@@ -218,7 +219,11 @@ myApp.controller("myController", function($scope) {
             var args = go.util.array.toArray(arguments);
             args[0] = args[0].name;
             _.extend(data, arguments[1]);
-            $scope.sampleData.root = data;
+            if (!$scope.sampleData.root) {
+                $scope.sampleData.root = data;
+            } else {
+                go.extend($scope.sampleData.root, data);
+            }
             $scope.sampleData.events.push(args);
         });
     });
