@@ -140,6 +140,58 @@ exports.util.array.toArray = toArray;
 
 exports.util.array.sort = sort;
 
+exports.charPack = function(c, len) {
+    var s = "";
+    while (s.length < len) {
+        s += c;
+    }
+    return s;
+};
+
+function Logger(name, style) {
+    this.name = name;
+    this.style = style;
+}
+
+Logger.prototype.log = function log(step) {
+    var depth, args = exports.util.array.toArray(arguments), str;
+    if (step && step.uid) {
+        depth = step.uid.split(".").length;
+        str = exports.charPack("	", depth) + step.uid + ":" + step.type + ":" + step.status + ":" + step.state + ":[" + step.progress + "]::";
+        args.shift();
+        args[0] = str + args[0];
+    }
+    this.applyName(args);
+    this.applyStyle(args);
+    console.log.apply(console, args);
+};
+
+Logger.prototype.applyName = function(args) {
+    var str = args[0];
+    if (this.name) {
+        var index = 0;
+        if (typeof str === "string" && str.charAt(index) === "	") {
+            while (str.charAt(index) === "	") {
+                index += 1;
+            }
+            if (index) {
+                str = str.substr(0, index) + this.name + str.substr(index + 1);
+            }
+        }
+        str = this.name + "::" + str;
+        args[0] = str;
+    }
+};
+
+Logger.prototype.applyStyle = function(args) {
+    if (this.style) {
+        args[0] = "%c" + args[0];
+        args.splice(1, 0, this.style);
+    }
+};
+
+var csl = new Logger();
+
 var _;
 
 (function() {
@@ -594,88 +646,32 @@ myApp.controller("myController", function($scope) {
     ex.xml = api;
 })();
 
-var socket = {}, project = {
+var socket = {
+    config: {
+        GOINSTANT_URL: "https://goinstant.net/0fc17c9b2a8f/runner-dev"
+    },
+    events: {
+        ON_USER_READY: "onUserReady",
+        ON_CONNECTION_SUCCESS: "onConnectionSuccess",
+        ON_CONNECTION_ERROR: "onConnectionError",
+        ON_TRACK_CONNECTION_SUCCESS: "onTrackConnectionSuccess",
+        ON_TRACK_CONNECTION_ERROR: "onTrackConnectionError"
+    }
+}, project = {
     name: "ProjectA"
 }, user = {
     displayName: "Admin Panel",
     isAdmin: true,
     visible: false,
     ua: navigator.userAgent,
-    tracks: {}
+    tracks: {},
+    scenarios: {}
 }, devices = {};
 
-function onTrackConnectionSuccess(trackRoom) {
-    console.log("Track connected");
-    function addDevice(userInfo) {
-        var channel, channelId;
-        if (!userInfo.isAdmin) {
-            if (!devices[userInfo.id]) {
-                console.log("	User Joined %s", userInfo.displayName);
-                devices[userInfo.id] = userInfo;
-                channelId = userInfo.id.split(":").pop();
-                channel = trackRoom.channel(channelId);
-                console.log("connected on chanel %s", channelId);
-                channel.on("message", function(data, context) {
-                    console.log("message received from %s", userInfo.id);
-                    var args = exports.util.array.toArray(data);
-                    rootScope.$broadcast.apply(rootScope, args);
-                });
-            }
-        }
-    }
-    function removeDevice(userInfo) {
-        if (devices[userInfo.id]) {
-            trackRoom.channel(userInfo.id).off("message");
-            delete devices[userInfo.id];
-            console.log("	User Left %s", userInfo.displayName);
-        }
-    }
-    function sendMessageToDevices(event) {
-        var args = exports.util.array.toArray(arguments);
-        exports.each(devices, sendMessageToDevice, args);
-    }
-    function sendMessageToDevice(device, index, list, args) {
-        args[0] = args[0].name;
-        var channelId = device.id.split(":").pop(), channel = trackRoom.channel(channelId), argsToObject = exports.extend.apply({
-            arrayAsObject: true
-        }, [ {}, args ]);
-        console.log("	sendToDevice on channel %s %o", channelId, argsToObject);
-        channel.message.apply(channel, [ argsToObject ]);
-    }
-    function mapEvents(events, method) {
-        rootScope.$on(events, method);
-    }
-    trackRoom.users.get(function(err, usersInfo, context) {
-        console.log("TrackUsers.get() %o", usersInfo);
-        exports.each(usersInfo, addDevice);
-    });
-    trackRoom.on("join", addDevice);
-    trackRoom.on("leave", removeDevice);
-    trackRoom.channel("public").on("message", function(data, context) {
-        console.log("message received on PUBLIC", data, context);
-    });
-    function setTrackOnDevices(event, track) {
-        exports.each(devices, setTrackOnDevice, track);
-    }
-    function setTrackOnDevice(device, index, list, track) {
-        var str = "/.users/" + device.id + "/track";
-        trackRoom.key(str).set(track, function() {
-            console.log("set param ", arguments);
-        });
-    }
-    exports.each(ex.events.admin, function(event, payload) {
-        if (event === ex.events.admin.LOAD_TEST) {
-            mapEvents(event, setTrackOnDevices);
-        } else {
-            mapEvents(event, sendMessageToDevices);
-        }
-    });
-}
-
 (function() {
-    var _subscriptions = {};
+    var _subscriptions = {}, csl = new Logger("serviceConst", "color:#FF0099");
     socket.on = function(eventName, callback) {
-        console.log("const:on %s", eventName);
+        csl.log("on %s", eventName);
         var subscribers = _subscriptions[eventName];
         if (typeof subscribers === "undefined") {
             subscribers = _subscriptions[eventName] = [];
@@ -683,7 +679,7 @@ function onTrackConnectionSuccess(trackRoom) {
         subscribers.push(callback);
     };
     socket.dispatch = function(eventName, data, context) {
-        console.log("dispatch:dispatch %s", eventName);
+        csl.log("dispatch %s", eventName);
         var subscribers = _subscriptions[eventName], i = 0, len;
         if (typeof subscribers === "undefined") {
             return;
@@ -696,35 +692,27 @@ function onTrackConnectionSuccess(trackRoom) {
             i += 1;
         }
     };
-    socket.config = {};
-    socket.config.GOINSTANT_URL = "https://goinstant.net/0fc17c9b2a8f/runner-dev";
-    socket.events = {};
-    socket.events.ON_USER_READY = "onUserReady";
-    socket.events.ON_CONNECTION_SUCCESS = "onConnectionSuccess";
-    socket.events.ON_CONNECTION_ERROR = "onConnectionError";
-    socket.events.ON_TRACK_CONNECTION_SUCCESS = "onTrackConnectionSuccess";
-    socket.events.ON_TRACK_CONNECTION_ERROR = "onTrackConnectionError";
 })();
 
 (function() {
-    var scope = this || {}, connection, user;
+    var scope = this || {}, connection, user, csl = new Logger("socketService", "color:#FF00FF");
     function init() {
-        console.log("socketService:init");
+        csl.log("init");
         socket.on(socket.events.ON_USER_READY, onUserReady);
     }
     function connect() {
-        console.log("socketService:connect");
+        csl.log("connect");
         scope.isConnected = false;
         connection = new goinstant.Connection(socket.config.GOINSTANT_URL);
         connection.connect(user, onConnection);
     }
     function onUserReady(userData) {
-        console.log("socketService:onUserReady");
+        csl.log("onUserReady");
         user = userData;
         connect();
     }
     function onConnection(err) {
-        console.log("socketService:onConnection");
+        csl.log("onConnection");
         if (err) {
             scope.isConnected = false;
             return socket.dispatch(socket.events.ON_CONNECTION_ERROR, err);
@@ -737,36 +725,126 @@ function onTrackConnectionSuccess(trackRoom) {
 })();
 
 (function() {
-    var project, trackRoom;
+    var project, trackRoom, csl = new Logger("trackRoomService", "color:#9900FF");
     function init() {
-        console.log("trackRoomService:init");
+        csl.log("init");
         socket.on(socket.events.ON_USER_READY, onUserReady);
         socket.on(socket.events.ON_PROJECT_READY, onProjectReady);
         socket.on(socket.events.ON_CONNECTION_SUCCESS, onConnectionSuccess);
     }
     function onUserReady(projectInfo) {
-        console.log("trackRoomService:onUserRead");
+        csl.log("onUserRead");
         project = projectInfo;
     }
     function onConnectionSuccess(connection) {
-        console.log("trackRoomService:onConnectionSuccess");
+        csl.log("onConnectionSuccess");
         trackRoom = connection.room(project.name);
         trackRoom.join().then(function(res) {
             socket.dispatch(socket.events.ON_TRACK_CONNECTION_SUCCESS, res.room);
         }, function(err) {
+            csl.log("	ERROR: %o", err);
             socket.dispatch(socket.events.ON_TRACK_CONNECTION_ERROR, err);
         });
     }
     function onProjectReady(projectData) {
-        console.log("trackRoomService:onProjectReady %o", projectData);
+        csl.log("onProjectReady %o", projectData);
         project = projectData;
     }
     init();
 })();
 
 (function() {
+    var csl = new Logger("trackRoomListeners", "color:#6633FF");
+    function onTrackConnectionSuccess(trackRoom) {
+        csl.log("Track connected");
+        function listenToMessages(device) {
+            var channelId = device.id.split(":").pop(), channel = trackRoom.channel(channelId);
+            csl.log("connected on chanel %s", channelId);
+            channel.on("message", function(data, context) {
+                csl.log("message received from %s", device.id);
+                var args = exports.util.array.toArray(data);
+                rootScope.$broadcast.apply(rootScope, args);
+            });
+        }
+        function listenToProgress(device) {
+            var str = "/.users/" + device.id + "/progress";
+            trackRoom.key(str).on("set", function(value, context) {
+                csl.log("	console update %s", value.percent);
+            });
+        }
+        function addDevice(userInfo) {
+            if (!userInfo.isAdmin) {
+                if (!devices[userInfo.id]) {
+                    csl.log("	User Joined %s", userInfo.displayName);
+                    devices[userInfo.id] = userInfo;
+                    listenToMessages(userInfo);
+                    listenToProgress(userInfo);
+                }
+            }
+        }
+        function removeDevice(userInfo) {
+            if (devices[userInfo.id]) {
+                trackRoom.channel(userInfo.id).off("message");
+                delete devices[userInfo.id];
+                csl.log("	User Left %s", userInfo.displayName);
+            }
+        }
+        function sendMessageToDevices(event) {
+            var args = exports.util.array.toArray(arguments);
+            exports.each(devices, sendMessageToDevice, args);
+        }
+        function sendMessageToDevice(device, index, list, args) {
+            args[0] = args[0].name;
+            var channelId = device.id.split(":").pop(), channel = trackRoom.channel(channelId), argsToObject = exports.extend.apply({
+                arrayAsObject: true
+            }, [ {}, args ]);
+            csl.log("	sendToDevice on channel %s %o", channelId, argsToObject);
+            channel.message.apply(channel, [ argsToObject ]);
+        }
+        function mapEvents(event, method) {
+            rootScope.$on(event, method);
+        }
+        trackRoom.users.get(function(err, usersInfo, context) {
+            csl.log("TrackUsers.get() %o", usersInfo);
+            exports.each(usersInfo, addDevice);
+        });
+        trackRoom.on("join", addDevice);
+        trackRoom.on("leave", removeDevice);
+        trackRoom.channel("public").on("message", function(data, context) {
+            csl.log("message received on PUBLIC", data, context);
+        });
+        function setTrackOnDevices(event, track) {
+            exports.each(devices, setTrackOnDevice, track);
+        }
+        function setTrackOnDevice(device, index, list, track) {
+            var str = "/.users/" + device.id + "/track";
+            trackRoom.key(str).set(track, function(err) {
+                if (err) {
+                    csl.log(err);
+                }
+            });
+        }
+        function setScenarioToDevices(event, scenario) {
+            exports.each(devices, setScenarioToDevice, scenario);
+        }
+        function setScenarioToDevice(device, index, list, scenario) {
+            var str = "/.users/" + device.id + "/scenarios";
+            trackRoom.key(str).set(scenario, function(err) {
+                if (err) {
+                    csl.log(err);
+                }
+            });
+        }
+        mapEvents(ex.events.admin.START, sendMessageToDevices);
+        mapEvents(ex.events.admin.STOP, sendMessageToDevices);
+        mapEvents(ex.events.admin.RESET, sendMessageToDevices);
+        mapEvents(ex.events.admin.START_RECORDING, sendMessageToDevices);
+        mapEvents(ex.events.admin.STOP_RECORDING, sendMessageToDevices);
+        mapEvents(ex.events.admin.LOAD_TEST, setTrackOnDevices);
+        mapEvents(ex.events.admin.REGISTER_SCENARIO, setScenarioToDevices);
+    }
     socket.on(socket.events.ON_TRACK_CONNECTION_SUCCESS, onTrackConnectionSuccess);
-    console.log("what is ua", navigator.userAgent);
+    csl.log("what is ua", navigator.userAgent);
     socket.dispatch(socket.events.ON_USER_READY, user);
     socket.dispatch(socket.events.ON_PROJECT_READY, project);
 })();

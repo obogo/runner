@@ -44,10 +44,11 @@ module.exports = function (grunt) {
                         'lib/ux-util-array.js',
                         'lib/ux-each.js',
                         'lib/ux-extend.js',
+                        'lib/ux-charPack.js',
                         'lib/data/_.js',
                         'lib/data/Inspector.js',
                         'lib/data/diff.js',
-                        'client/runner/log.js',
+                        'shared/log.js',
                         'client/runner/const.js',
                         'client/runner/invoke.js',
                         'client/runner/Path.js',
@@ -74,10 +75,11 @@ module.exports = function (grunt) {
                         'lib/ux-util-array.js',
                         'lib/ux-each.js',
                         'lib/ux-extend.js',
+                        'lib/ux-charPack.js',
                         'lib/data/_.js',
                         'lib/data/Inspector.js',
                         'lib/data/diff.js',
-                        'client/runner/log.js',
+                        'shared/log.js',
                         'client/runner/const.js',
                         'client/runner/invoke.js',
                         'client/runner/Path.js',
@@ -91,7 +93,11 @@ module.exports = function (grunt) {
                         'client/runner/export.js',
                         'lib/ux-selector.js',
                         'lib/parser/ux-parser.js',
-                        'client/socket/goinstant/socket.js'
+                        'client/socket/goinstant/clientSocketConst.js',
+                        'client/socket/goinstant/socketDispatch.js',
+                        'client/socket/goinstant/clientSocketService.js',
+                        'client/socket/goinstant/clientTrackRoomService.js',
+                        'client/socket/goinstant/clientTrackRoomListeners.js'
 //                        'src/recorder.js',
                     ],
                     '../public/admin/js/<%= pkg.packageName %>-<%= pkg.filename %>-admin-mock.js': [
@@ -115,11 +121,17 @@ module.exports = function (grunt) {
                         'lib/ux-extend.js',
                         'lib/ux-each.js',
                         'lib/ux-util-array.js',
+                        'lib/ux-charPack.js',
+                        'shared/log.js',
                         'lib/data/_.js',
                         'lib/ux-extend.js',
                         'admin/admin.js',
                         'lib/parser/xml2json.js',
-                        'admin/socket/goinstant/socket.js'
+                        'admin/socket/goinstant/adminSocketConst.js',
+                        'admin/socket/goinstant/socketDispatch.js',
+                        'admin/socket/goinstant/adminSocketService.js',
+                        'admin/socket/goinstant/adminTrackRoomService.js',
+                        'admin/socket/goinstant/adminTrackRoomListeners.js'
                     ]
                 }
             },

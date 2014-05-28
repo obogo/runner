@@ -491,6 +491,14 @@ function extend(destination, source) {
 
 exports.extend = extend;
 
+exports.charPack = function(c, len) {
+    var s = "";
+    while (s.length < len) {
+        s += c;
+    }
+    return s;
+};
+
 var _;
 
 (function() {
@@ -772,24 +780,49 @@ exports.data.diff = function(source, compare) {
     return ret;
 };
 
-var csl = function() {
-    var api = {};
-    function log(step) {
-        var depth = step.uid.split(".").length, args = exports.util.array.toArray(arguments), str = charPack("	", depth) + step.uid + ":" + step.type + ":" + step.status + ":" + step.state + ":[" + step.progress + "]::";
+function Logger(name, style) {
+    this.name = name;
+    this.style = style;
+}
+
+Logger.prototype.log = function log(step) {
+    var depth, args = exports.util.array.toArray(arguments), str;
+    if (step && step.uid) {
+        depth = step.uid.split(".").length;
+        str = exports.charPack("	", depth) + step.uid + ":" + step.type + ":" + step.status + ":" + step.state + ":[" + step.progress + "]::";
         args.shift();
         args[0] = str + args[0];
-        console.log.apply(console, args);
     }
-    function charPack(c, len) {
-        var s = "";
-        while (s.length < len) {
-            s += c;
+    this.applyName(args);
+    this.applyStyle(args);
+    console.log.apply(console, args);
+};
+
+Logger.prototype.applyName = function(args) {
+    var str = args[0];
+    if (this.name) {
+        var index = 0;
+        if (typeof str === "string" && str.charAt(index) === "	") {
+            while (str.charAt(index) === "	") {
+                index += 1;
+            }
+            if (index) {
+                str = str.substr(0, index) + this.name + str.substr(index + 1);
+            }
         }
-        return s;
+        str = this.name + "::" + str;
+        args[0] = str;
     }
-    api.log = log;
-    return api;
-}();
+};
+
+Logger.prototype.applyStyle = function(args) {
+    if (this.style) {
+        args[0] = "%c" + args[0];
+        args.splice(1, 0, this.style);
+    }
+};
+
+var csl = new Logger();
 
 var types = {}, statuses = {
     UNRESOLVED: "unresolved",
@@ -3255,7 +3288,19 @@ exports.selector = function() {
     return this;
 }());
 
-var socket = {}, project = {
+var socket = {
+    config: {
+        GOINSTANT_URL: "https://goinstant.net/0fc17c9b2a8f/runner-dev"
+    },
+    events: {
+        ON_USER_READY: "onUserReady",
+        ON_PROJECT_READY: "onProjectReady",
+        ON_CONNECTION_SUCCESS: "onConnectionSuccess",
+        ON_CONNECTION_ERROR: "onConnectionError",
+        ON_TRACK_CONNECTION_SUCCESS: "onTrackConnectionSuccess",
+        ON_TRACK_CONNECTION_ERROR: "onTrackConnectionError"
+    }
+}, project = {
     name: "ProjectA"
 }, user = {
     displayName: "My Device1",
@@ -3269,40 +3314,10 @@ var socket = {}, project = {
     ua: navigator.userAgent
 };
 
-function onTrackConnectionSuccess(trackRoom) {
-    console.log("Track connected");
-    trackRoom.self().key("status").set("ready");
-    var channelId = trackRoom._connection._user.id.split(":").pop(), channel = trackRoom.channel(channelId);
-    console.log("listening on channel %s", channelId);
-    trackRoom.channel("public").on("message", function(data, context) {
-        console.log("message received on PUBLIC", data, context);
-    });
-    channel.on("message", function(data, context) {
-        console.log("message received on " + channelId, data, context);
-        var args = exports.util.array.toArray(data), event = args.shift(), key = event.split(":").pop();
-        ex[key].apply(ex, args);
-    });
-    exports.each(ex.events.runner, function(evt) {
-        ex.on(evt, function(evt) {
-            var args = exports.util.array.toArray(arguments), data = exports.extend.apply({
-                arraysAsObject: true
-            }, [ {}, args ]);
-            console.log("	send to admin %o", data);
-            channel.message.apply(channel, [ {
-                0: arguments[0],
-                1: data
-            } ]);
-        });
-    });
-    trackRoom.self().key("track").on("set", function(value, context) {
-        console.log("Something changed!!!", value, context);
-    });
-}
-
 (function() {
-    var _subscriptions = {};
+    var _subscriptions = {}, csl = new Logger("serviceConst", "color:#FF0099");
     socket.on = function(eventName, callback) {
-        console.log("const:on %s", eventName);
+        csl.log("on %s", eventName);
         var subscribers = _subscriptions[eventName];
         if (typeof subscribers === "undefined") {
             subscribers = _subscriptions[eventName] = [];
@@ -3310,7 +3325,7 @@ function onTrackConnectionSuccess(trackRoom) {
         subscribers.push(callback);
     };
     socket.dispatch = function(eventName, data, context) {
-        console.log("dispatch:dispatch %s", eventName);
+        csl.log("dispatch %s", eventName);
         var subscribers = _subscriptions[eventName], i = 0, len;
         if (typeof subscribers === "undefined") {
             return;
@@ -3323,39 +3338,30 @@ function onTrackConnectionSuccess(trackRoom) {
             i += 1;
         }
     };
-    socket.config = {};
-    socket.config.GOINSTANT_URL = "https://goinstant.net/0fc17c9b2a8f/runner-dev";
-    socket.events = {};
-    socket.events.ON_USER_READY = "onUserReady";
-    socket.events.ON_PROJECT_READY = "onProjectReady";
-    socket.events.ON_CONNECTION_SUCCESS = "onConnectionSuccess";
-    socket.events.ON_CONNECTION_ERROR = "onConnectionError";
-    socket.events.ON_TRACK_CONNECTION_SUCCESS = "onTrackConnectionSuccess";
-    socket.events.ON_TRACK_CONNECTION_ERROR = "onTrackConnectionError";
 })();
 
 (function() {
-    var scope = this || {}, connection, _user;
+    var scope = this || {}, connection, _user, csl = new Logger("socketService", "color:#FF00FF");
     function init() {
-        console.log("socketService:init");
+        csl.log("init");
         socket.on(socket.events.ON_USER_READY, onUserReady);
     }
     function connect() {
-        console.log("socketService:connect %o", _user);
+        csl.log("connect %o", _user);
         scope.isConnected = false;
         connection = new goinstant.Connection(socket.config.GOINSTANT_URL);
         connection.connect(user, onConnection);
     }
     function onUserReady(userData) {
-        console.log("socketService:onUserReady");
+        csl.log("onUserReady");
         _user = userData;
         connect();
     }
     function onConnection(err) {
-        console.log("socketService:onConnection");
+        csl.log("onConnection");
         if (err) {
             scope.isConnected = false;
-            console.log("socketService:onConnectionError %o", err);
+            csl.log("onConnectionError %o", err);
             return socket.dispatch(socket.events.ON_CONNECTION_ERROR, err);
         }
         scope.isConnected = true;
@@ -3366,37 +3372,71 @@ function onTrackConnectionSuccess(trackRoom) {
 })();
 
 (function() {
-    var _user, project, trackRoom;
+    var _user, project, trackRoom, csl = new Logger("trackRoomService", "color:#9900FF");
     function init() {
-        console.log("trackRoomService:init");
+        csl.log("init");
         socket.on(socket.events.ON_USER_READY, onUserReady);
         socket.on(socket.events.ON_PROJECT_READY, onProjectReady);
         socket.on(socket.events.ON_CONNECTION_SUCCESS, onConnectionSuccess);
     }
     function onUserReady(userData) {
-        console.log("trackRoomService:onUserRead");
+        csl.log("onUserRead");
         _user = userData;
     }
     function onConnectionSuccess(connection) {
-        console.log("trackRoomService:onConnectionSuccess", project.name);
+        csl.log("onConnectionSuccess", project.name);
         trackRoom = connection.room(project.name);
         trackRoom.join().then(function(res) {
             socket.dispatch(socket.events.ON_TRACK_CONNECTION_SUCCESS, res.room);
         }, function(err) {
-            console.log("	Track Connection Error %o", err);
+            csl.log("	Track Connection Error %o", err);
             socket.dispatch(socket.events.ON_TRACK_CONNECTION_ERROR, err);
         });
     }
     function onProjectReady(projectData) {
-        console.log("trackRoomService:onProjectReady %o", projectData);
+        csl.log("onProjectReady %o", projectData);
         project = projectData;
     }
     init();
 })();
 
 (function() {
+    var csl = new Logger("trackRoomListeners", "color:#6633FF");
+    function onTrackConnectionSuccess(trackRoom) {
+        csl.log("Track connected");
+        trackRoom.self().key("status").set(ex.getRoot().status);
+        var channelId = trackRoom._connection._user.id.split(":").pop(), channel = trackRoom.channel(channelId);
+        csl.log("listening on channel %s", channelId);
+        trackRoom.channel("public").on("message", function(data, context) {
+            csl.log("message received on PUBLIC", data, context);
+        });
+        channel.on("message", function(data, context) {
+            csl.log("message received on " + channelId, data, context);
+            var args = exports.util.array.toArray(data), event = args.shift(), key = event.split(":").pop();
+            ex[key].apply(ex, args);
+        });
+        exports.each(ex.events.runner, function(evt) {
+            ex.on(evt, function(evt) {
+                var root = ex.getRoot();
+                trackRoom.self().key("progress").set({
+                    timeRemaining: root.timeLeft,
+                    percent: root.progress
+                }, function(err) {
+                    csl.log(err);
+                });
+            });
+        });
+        trackRoom.self().key("track").on("set", function(value, context) {
+            csl.log("	test loaded %s", value.name);
+            ex.loadTest(value);
+        });
+        trackRoom.self().key("scenarios").on("set", function(value, context) {
+            csl.log("	scenario registered %s", value.name);
+            ex.registerScenario(value);
+        });
+    }
     socket.on(socket.events.ON_TRACK_CONNECTION_SUCCESS, onTrackConnectionSuccess);
-    console.log("what is ua", navigator.userAgent);
+    csl.log("what is ua", navigator.userAgent);
     socket.dispatch(socket.events.ON_USER_READY, user);
     socket.dispatch(socket.events.ON_PROJECT_READY, project);
 })();
