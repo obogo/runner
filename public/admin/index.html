@@ -1,80 +1,84 @@
 <!DOCTYPE html>
-<html>
+<html data-ng-app="admin">
 <head>
-    <title>WebUX AngularJS JSON Viewer</title>
+    <title>Admin Panel</title>
     <link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css"/>
     <link rel="stylesheet" href="css/ux-jsonview.css"/>
     <style>
-        body {
-            padding: 15px;
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0px;
+            padding: 0px;
+        }
+
+        .admin {
+            position: absolute;
+            top: 0px;
+            left: 300px;
+            right: 0px;
+            bottom: 0px;
+            background-color: #CCCCCC;
+            border: 1px solid #FFFFFF;
+            color: #000000;
+            overflow: auto;
+        }
+
+        .import {
+            position: absolute;
+            left: 0px;
+            bottom: 0px;
+            width: 100%;
+        }
+
+        .importXML {
+            width: 400px;
+        }
+
+        .jsonViewer {
+            position: absolute;
+            top: 30px;
+            right: 0px;
+            width: 300px;
+            height: 400px;
+            overflow: auto;
+            border: 1px solid #000000;
+        }
+
+        .admin .jsonViewer {
+            left: 0px;
+            right: auto;
         }
     </style>
+    <script src="https://cdn.goinstant.net/v1/platform.min.js"></script>
+    <script src="js/lib/angular.js"></script>
+    <script src="js/lib/ux-jsonview.js"></script>
+    <script src="js/go-runner-admin.js"></script>
 </head>
 <body>
-<h1>AngularJS JSON Viewer</h1>
-<div ng-app="myApp">
-    <div ng-controller="myController">
-        <div style="margin:10px 0 10px 0; padding:10px; background-color:#EEEEEE; border-radius:5px; font:12px Tahoma;">
-            <a href="" ng-click="changeProp()">Change Data</a>
+<!--// ADMIN -->
+<div class="admin">
+    <div class="title">Admin</div>
+    <div data-ng-controller="myController">
+        <div class="jsonViewer">
+            <div ux-jsonview="{showPaths:true}" data-ng-model="sampleData"></div>
         </div>
-
-        <div ux-jsonview="{showPaths:true}" ng-model="sampleData"></div>
-
+        <div class="import">
+            <div class="importXML">
+                <label for="startUID">Start UID:</label>
+                <input id="startUID" type="text" data-ng-model="startNode" value="">
+                <a href="" data-ng-click="start(startNode)">Start</a>
+                <a href="" data-ng-click="reset()">Reset</a>
+                <span>time:{{data.timeLeft}}s</span>
+                <br/>
+                <a href="" data-ng-click="setScenarioXML()">Scenario XML</a>
+                <a href="" data-ng-click="setSimpleXML()">Simple XML</a>
+                <a href="" data-ng-click="registerScenario()" style="float:right;margin-right:4px;">Register</a>
+                <a href="" data-ng-click="sendTest()" style="float:right;margin-right:4px;">Set</a>
+                <textarea id="importXML" data-ng-model="xmlData" rows="10" cols="54"></textarea>
+            </div>
+        </div>
     </div>
 </div>
-<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.7/angular.min.js"></script>
-<script src="js/ux-jsonview.js"></script>
-<script>
-    function Simple() {
-        this.name = 'simple';
-        this.version = "2.0.3";
-    }
-
-    Simple.prototype.baseClass = 'Atom';
-
-    var data = {
-        "label": "Hello world",
-        "obj": {
-            "val1": "First val",
-            "val2": 123,
-            "val3": true,
-            "nullVal": null,
-            "undefinedVal": undefined
-        },
-        "list": [
-            1,
-            "two",
-            {
-                "label": 3,
-                "more" : [
-                    'Rob',
-                    {
-                        lastName: 'Taylor'
-                    }
-                ]
-            },
-            true
-        ],
-        simpleInst: new Simple()
-    };
-</script>
-<script>
-    (function () {
-        //angular module
-        var myApp = angular.module('myApp', ['ux']);
-
-        //test controller
-        myApp.controller('myController', function ($scope) {
-            $scope.sampleData = data;
-            var counter = 1;
-            $scope.changeProp = function () {
-                $scope.sampleData.list[2].more[1].lastName += 1;
-                $scope.sampleData.label = 'Goodbye, ;(';
-                $scope.sampleData.simpleInst.name = 'complex' + counter++;
-                $scope.sampleData.list.push('Another Item');
-            }
-        });
-    })();
-</script>
 </body>
 </html>

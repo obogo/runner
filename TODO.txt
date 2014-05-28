@@ -94,6 +94,9 @@ TODO:
 
     Make timestamps only do performance. Make so increments actually determine complete fail and the amount of steps.
 
+MARKDOWN HTML RENDER:
+http://dynalon.github.io/mdwiki/#!index.md
+
 COMPETITORS:
     http://speedcurve.com/ - page load speeds. uses Google Page Speed (https://developers.google.com/speed/pagespeed/). (Nice colors)
 

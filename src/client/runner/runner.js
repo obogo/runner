@@ -1,7 +1,6 @@
 function runner(api) {
     dispatcher(api);
     var rootPrefix = 'R',
-        methods = new MethodAPI(api), // internal mapping of types to methods.
         activePath = new Path(),
     //TODO: This needs to be passed in and run a default.
         options = {
@@ -9,7 +8,7 @@ function runner(api) {
         },
         intv,
         _steps,
-        rootStep = importStep({uid:rootPrefix, label:types.ROOT, type:types.ROOT, index: -1, maxTime: 100}),
+        rootStep = importStep({uid: rootPrefix, label: types.ROOT, type: types.ROOT, index: -1, maxTime: 100}),
 //        diffRoot,
         differ = diffThrottle(api, rootStep, activePath, 1000);
 
@@ -17,8 +16,8 @@ function runner(api) {
         return rootStep[stepsProp];
     }
 
-    function setSteps(steps) {
-        _steps = steps;
+    function loadTest(steps) {
+        _steps = _.isArray(steps) ? steps : [steps];
         reset();
     }
 
@@ -27,14 +26,16 @@ function runner(api) {
         applySteps(_steps);
         updateTime(rootStep);
         rootStep.timeLeft = activePath.getTime();
-        change(events.RESET);
+        change(events.runner.ON_RESET);
     }
 
     function applySteps(steps) {
-        var mySteps = exports.each(steps.slice(), importStep, rootPrefix);
-        rootStep[stepsProp] = mySteps;
-        csl.log(rootStep, '');
-        activePath.setData(rootStep);
+        if (steps) {
+            var mySteps = exports.each(steps.slice ? steps.slice() : steps, importStep, rootPrefix);
+            rootStep[stepsProp] = mySteps;
+//        csl.log(rootStep, '');
+            activePath.setData(rootStep);
+        }
     }
 
     function start(path) {
@@ -47,15 +48,18 @@ function runner(api) {
             activePath.setPath([0]);
         }
         csl.log(activePath.getSelected(), "start %s", activePath.getSelected().label);
-        change(events.START);
+        change(events.runner.ON_START);
         go();
     }
 
-    function stop() {
+    function stop(error) {
         if (intv) { // only stop if we are going.
+            if (error && console && console.log) {
+                console.log("RUNNER STOPPED ON ERROR: " + error.message);
+            }
             clearTimeout(intv);
             intv = 0;
-            change(events.STOP);
+            change(events.runner.ON_STOP);
         }
     }
 
@@ -80,41 +84,41 @@ function runner(api) {
 
     function run() {
         var activeStep = activePath.getSelected();
-        csl.log(activeStep, "run %s state:%s", activeStep.label, activeStep.state);
+        csl.log(activeStep, "%s:%s", activeStep.uid, activeStep.state);
         // conditionals exec first. others exec last.
         updateTime(activeStep);
-        if (activePath.isCondition(activeStep)) {
-            if (activeStep.status === statuses.SKIP) {
-                activeStep.progress = 0;
-                next();
-            } else if (activeStep.state === states.COMPLETE) {
-                next();
-            } else if (activeStep.status !== statuses.PASS) {
-                exec(activeStep, checkDependency(activeStep));
-            } else if (activeStep[stepsProp].length && activeStep.childIndex < activeStep[stepsProp].length - 1) {
-                next();
-            } else if (isExpired(activeStep)) {
-                activeStep.state = states.COMPLETE;
-                completeStep(activeStep);
-            } else {
+        if (activeStep.state === states.COMPLETE) {
+            completeStep(activeStep);
+        } else if (activeStep.state === states.PRE_EXEC && !overLimit(activeStep, pre)) {
+            if (isExpired(activeStep)) {
                 expire(activeStep);
+            } else {
+                exec(activeStep, pre);
             }
-        } else {
+        } else if (activeStep.state === states.POST_EXEC && !overLimit(activeStep, post)) {
+            if (isExpired(activeStep)) {
+                expire(activeStep);
+            } else {
+                exec(activeStep, post);
+            }
+        } else if (activeStep.state === states.EXEC_CHILDREN) {
             if (activeStep[stepsProp].length && activeStep.childIndex === -1) {
                 activePath.next();
-            } else if (activeStep.state === states.COMPLETE) {
-                completeStep(activeStep);
-            } else if (!isExpired(activeStep)) {
-                exec(activeStep, checkDependency(activeStep));
             } else {
-                expire(activeStep);
+                nextState(activeStep);// has run and has run children.
+                if (activeStep.type === types.ROOT) {
+                    api.stop();
+                    change(events.runner.ON_DONE);//finished all tests.
+                }
             }
+        } else {
+            nextState(activeStep);
         }
         if (!intv) {
             return;
         }
         updateTime(activeStep);
-        change(events.UPDATE);
+        change(events.runner.ON_UPDATE);
         go();
     }
 
@@ -125,41 +129,39 @@ function runner(api) {
     }
 
     function isExpired(step) {
-        return step.execCount * step.increment > step.maxTime;
-    }
-
-    function checkDependency(activeStep) {
-        var result;
-        if (MethodAPI.prototype[activeStep.type + dependencyProp]) {
-            result = MethodAPI.prototype[activeStep.type + dependencyProp](activeStep);
-            if (result) {
-                return result;
-            }
-            throw new Error("Dependency Failure: \"" + activeStep + "\" unable to fetch dependency.");
+        if (step.state === states.PRE_EXEC) {
+            return step.pre.count * step.increment > step.maxTime;
+        } else if (step.state === states.POST_EXEC) {
+            return step.post.count * step.increment > step.maxTime;
         }
-        return;
+        return true;
     }
 
-    function exec(activeStep, dependency) {
-        activeStep.state = states.RUNNING;
-        csl.log(activeStep, "run method %s", activeStep.type);
-        activeStep.status = methods[activeStep.type](activeStep, dependency);
-        activeStep.execCount += 1;
+    // So we can limit the number of calls to a method if necessary and still have it fail.
+    function overLimit(step, type) {
+        var data = step[type];
+        return !!(data && data.limit && data.count >= data.limit);
+    }
+
+    //TODO: when executing. need to do injection. So they can ask for variables from the scenario in any of their registered methods.
+    function exec(activeStep, type) {
+//        csl.log(activeStep, "run method %s", activeStep.type);
+        var method = type + 'Exec',
+            response = execM(activeStep, method);
+        if (response) {// if they don't return a status. We don't set it.
+            activeStep.status = response;
+        }
+        activeStep[type].count += 1;
         if (activeStep.status === statuses.PASS) {
-            activeStep.state = states.COMPLETE;
-            activePath.skipBlock();
-            csl.log(activeStep, "pass %s", activeStep.label);
-            if (activeStep.type === types.ROOT) {
-                api.stop();
-                change(events.DONE);//finished all tests.
-            }
+            nextState(activeStep);
+//            csl.log(activeStep, "pass %s", activeStep.label);
         } else if (isExpired(activeStep)) {
             expire(activeStep);
         }
     }
 
     function completeStep(activeStep) {
-        csl.log(activeStep, "complete %s", activeStep.label);
+//        csl.log(activeStep, "complete %s", activeStep.label);
         if (activeStep.type === types.ROOT) {
             api.stop();
             return;
@@ -168,18 +170,18 @@ function runner(api) {
     }
 
     function expire(step) {
-        csl.log(activePath.getSelected(), "run expired");
+//        csl.log(activePath.getSelected(), "run expired");
         updateTime(step);
-        csl.log(activePath.getSelected(), "expired %s %s/%s", step.label, step.time, step.maxTime);
-        step.status = activePath.isCondition(step) ? statuses.SKIP : statuses.TIMED_OUT;
-        step.state = states.COMPLETE;
+//        csl.log(activePath.getSelected(), "expired %s %s/%s", step.label, step.time, step.maxTime);
+        step.status = statuses.TIMED_OUT;
+        nextState(step);
     }
 
     function updateTime(step) {
         var now = Date.now();
         if (!step.startTime) step.startTime = now;
         step.time = now - step.startTime;
-        csl.log(activePath.getSelected(), "updateTime %s %s/%s", step.label, step.time, step.maxTime);
+//        csl.log(activePath.getSelected(), "updateTime %s %s/%s", step.label, step.time, step.maxTime);
     }
 
     function getStepFromPath(path, index, step) {
@@ -197,16 +199,18 @@ function runner(api) {
         differ.fire(evt);
     }
 
+    api.options = {
+        stopOnError: true
+    };
     api.types = types;
     api.states = states;
     api.statuses = statuses;
-    api.register = register;
     api.start = start;
     api.stop = stop;
     api.resume = resume;
     api.reset = reset;
     api.getSteps = getSteps;
-    api.setSteps = setSteps;
+    api.loadTest = loadTest;
     api.getParent = activePath.getParent;
     api.getParentOfType = function (step, type) {
         var parent = ex.getParent(step);
@@ -239,6 +243,13 @@ function runner(api) {
     api.getLastStep = function () {
         return activePath.getLastStep();
     };
+    api.throwError = function (step, message) {
+        execM(step, 'onError', {error: {type: 'internal', message: message}});
+    };
+
+    win.addEventListener('error', function (error) {
+        handleError(rootStep, error);
+    });
 
     return api;
 }

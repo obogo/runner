@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<scenario name="test1">
+    <set property="a">1</set>
+    <set property="b">1</set>
+    <condition>
+        <if expression="a == b">
+            <set property="c">2</set>
+            <condition>
+                <if expression="c > a">
+                    <set property="a">2</set>
+                </if>
+            </condition>
+            <find query=".testbed a:eq(0)">
+                <click/>
+            </find>
+        </if>
+        <elseif expression="b > a">
+            <step></step>
+        </elseif>
+        <else>
+            <find query=".testbed li a:eq(0)">
+                <condition>
+                    <if expression="firstLink.childNodes.length"></if>
+                </condition>
+                <!--//
+                    have fail - which stops
+                    have warn - which logs or something (status icon of warning)
+                    have requery (on clicks or similar) then they retry the parent selector before executing. Like if mouse over made an item disappear.
+                    execLimit - how many times it can execute.
+                //-->
+                <click requery="true" execLimit="2"></click>
+                <val></val>
+                <toBe property="innerText">Small Import</toBe>
+            </find>
+        </else>
+    </condition>
+    <!--// this is a private scenario because it is defined inside another scenario //-->
+    <scenario name="scnLocal">
+        <!--// can only set properties on this series. Cannot set properties above //-->
+        <set property="a"></set>
+    </scenario>
+    <run name="scn1" scenario="scn"></run>
+    <find query=".testbed li a:eq(1)">
+        <click></click>
+    </find>
+    <condition>
+        <if expression="a == 2">
+            <step></step>
+        </if>
+    </condition>
+    <run name="scn2" scenario="scn"></run>
+    <condition>
+        <if expression="run-scn2.a === 2">
+
+        </if>
+    </condition>
+    <scenario name="deep">
+        <run name="scn3" scenario="scnLocal"></run>
+    </scenario>
+    <run name="scn4" scenario="scnLocal"></run>
+</scenario>

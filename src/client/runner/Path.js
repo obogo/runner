@@ -8,15 +8,15 @@ function Path() {
     function setPath(path) {
         var step = root;
         exports.each(path, function (pathIndex) {
-            csl.log(step, "%s.childIndex = %s", step.label, pathIndex);
+//            csl.log(step, "%s.childIndex = %s", step.label, pathIndex);
             pathIndex = parseInt(pathIndex, 10);
             step.childIndex = pathIndex;
             step = step[stepsProp][pathIndex];
             values.push(pathIndex);
             selected = step;
-            selected.state = states.ENTERING;
+            nextState(selected);
         });
-        csl.log(step, "values %s", values.join('.'));
+//        csl.log(step, "values %s", values.join('.'));
     }
 
     function getPath(offShift) {
@@ -37,16 +37,13 @@ function Path() {
     function next() {
         if (!selected) {
             select(root);
-            csl.log("\t%cRoot Start: %s", "color:#F90", selected.label);
+//            csl.log("\t%cRoot Start: %s", "color:#F90", selected.label);
         }
         if (selectNextChild() || selectNextSibling() || selectParent()) {
-            if (selected.status === statuses.SKIP) {
-                next();
-            }
             return;
         }
         if (selected === root) {
-            csl.log(selected, "%cROOT: %s", "color:#F90", selected.label);
+//            csl.log(selected, "%cROOT: %s", "color:#F90", selected.label);
             return;
         } else {
             next();
@@ -75,17 +72,17 @@ function Path() {
             i += 1;
         }
         selected = step;
-        selected.state = states.ENTERING;
+        nextState(selected);
     }
 
     function selectNextChild() {
         var len = selected[stepsProp].length;
-        if (selected.status === statuses.SKIP || selected.childIndex >= len) {
+        if (selected.childIndex >= len) {
             return false;
         }
         if (len && selected.childIndex + 1 < len) {
             select(selected[stepsProp][selected.childIndex + 1]);
-            csl.log(selected, "%cgetNextChild: %s", "color:#F90", selected.label);
+//            csl.log(selected, "%cgetNextChild: %s", "color:#F90", selected.label);
             return true;
         }
         selected.childrenComplete = true;
@@ -96,7 +93,7 @@ function Path() {
         var step = getStepFromPath(values, 0, root, -1);
         if (step) {
             select(step);
-            csl.log(selected, "%cgetParent: %s", "color:#F90", selected.label);
+//            csl.log(selected, "%cgetParent: %s", "color:#F90", selected.label);
             return true;
         }
         return false;
@@ -108,7 +105,7 @@ function Path() {
         step = getStepFromPath(values, 0, root, 0);
         if (step) {
             select(step);
-            csl.log(selected, "%cgetNextSibling: %s", "color:#F90", selected.label);
+//            csl.log(selected, "%cgetNextSibling: %s", "color:#F90", selected.label);
             return true;
         } else {
             return selectParent();
@@ -143,15 +140,21 @@ function Path() {
     }
 
     function _getAllProgress(step, index, list, changed) {
-        if (step.status === statuses.SKIP) {
-            exports.each(step[stepsProp], skipStep);
-        }
         exports.each(step[stepsProp], _getAllProgress, changed);
         updateProgress(step, changed);
     }
 //
     function getRunPercent(step) {
-        return step.status === statuses.PASS ? 1 : (step.time > step.maxTime ? 1 : step.time / step.maxTime);
+        var data = typeData[step.type], count = 0, limit = 0;
+        if (data.preExec) {
+            limit += 1;
+            count += step.state === states.EXEC_CHILDREN || step.state === states.POST_EXEC || step.state === states.COMPLETE ? 1 : 0;
+        }
+        if (data.postExec) {
+            limit += 1;
+            count += step.state === states.COMPLETE ? 1 : 0;
+        }
+        return count / limit;
     }
 
     function getProgressChanges(step, changed) {
@@ -171,98 +174,39 @@ function Path() {
         return changed;
     }
 
-    function storeProgressChanges(step) {
-        pendingProgressChanges = getProgressChanges(step);
-    }
-
     function updateProgress(step, changed) {
         var len, childProgress, i = 0;
-        if (step.status === statuses.SKIP) {
-            step.progress = 0;
-            return;
-        }
         if (step.state === states.COMPLETE) {
             step.progress = 1;
         } else {
             len = step[stepsProp].length;
             if (len && step.childIndex !== -1) {
                 childProgress = 0;
-                step.skipCount = 0;
                 while (i <= step.childIndex && i < len) {
-                    if (step[stepsProp][i].status != statuses.SKIP) {
-                        childProgress += step[stepsProp][i].progress;
-                    } else {
-                        step.skipCount += 1;
-                    }
+                    childProgress += step[stepsProp][i].progress;
                     i += 1;
                 }
                 childProgress += getRunPercent(step);
-                step.progress = childProgress / (len - step.skipCount + (step.type !== types.ROOT ? 1 : 0)); // add one for this item.
+                len += 1;
+                step.progress = childProgress / len; // add one for this item.
             } else {
                 step.progress = getRunPercent(step);
             }
         }
         changed.push(step);
     }
-//TODO: This skip block logic needs to be refactored. The condition.js should handle this skip.
-    function skipBlock() {
-        if (selected.type === types.IF || selected.type === types.ELSEIF || selected.type === types.ELSE) {
-            var parent = getStepFromPath(values, 0, root, -1);
-            if (selected.type === types.ELSEIF || selected.type === types.ELSE) {
-                skipPreDependentChildCondition(parent);
-            }
-            if (selected.type === types.IF || selected.type === types.ELSEIF) {
-                skipPostDependentCondition(parent);
-            }
-        }
-    }
-
-    function skipPreDependentChildCondition(parent) {
-        var j = parent.childIndex - 1, jLen = 0;
-        while (j >= jLen) {
-            var s = parent[stepsProp][j];
-            if (s.type === types.IF || s.type === types.ELSEIF) {
-                skipStep(s);
-            } else {
-                break;
-            }
-            j -= 1;
-        }
-    }
-
-    function skipPostDependentCondition(parent) {
-        var i = parent.childIndex + 1, iLen = parent[stepsProp].length;
-        while (i < iLen) {
-            var s = parent[stepsProp][i];
-            if (s.type === types.ELSEIF || s.type === types.ELSE) {
-                skipStep(s);
-            } else {
-                break;
-            }
-            i += 1;
-        }
-    }
-
-    function skipStep(step) {
-        if (step.status !== statuses.SKIP) {
-            csl.log(step, "%cSKIP %s", "color:#FF6600", step.uid);
-            step.status = statuses.SKIP;
-            storeProgressChanges(step);
-        }
-    }
-
-    function isCondition(step) {
-        return step.type === types.IF || step.type === types.ELSEIF || step.type === types.ELSE;
-    }
 
     function getTime() {
-        var result = getStepTime(root),
-            avg = result.complete ? result.time / result.complete : 0,
-            estimate = result.total * avg;
-        if (result.totalTime > estimate) {
-            estimate = result.totalTime;
+        if (root) {
+            var result = getStepTime(root),
+                avg = result.complete ? result.time / result.complete : 0,
+                estimate = result.total * avg;
+            if (result.totalTime > estimate) {
+                estimate = result.totalTime;
+            }
+            return Math.ceil((estimate - result.time) * 0.001);
         }
-        return Math.ceil((estimate - result.time) * 0.001);
+        return 0;
     }
 
     function getStepTime(step) {
@@ -298,8 +242,6 @@ function Path() {
     this.getPath = getPath;
     this.getProgressChanges = getProgressChanges;
     this.getAllProgress = getAllProgress;
-    this.skipBlock = skipBlock;
-    this.isCondition = isCondition;
     this.getTime = getTime;
     this.getParent = getParentFrom;
 }

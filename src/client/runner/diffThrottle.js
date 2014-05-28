@@ -8,7 +8,7 @@ function diffThrottle(runner, rootStep, activePath, throttle) {
         var now = Date.now(), then = lastTime + throttle;
         clearTimeout(intv);
         if (evt) {
-            console.log("%c%s", "color:#009900;", evt);
+//            console.log("%c%s", "color:#009900;", evt);
             lastEvent = evt;
         }
         if (now > then) {

@@ -1,39 +1,22 @@
 (function () {
-    function handleDependency(step) {
-        var prevSibling = ex.getPrevSibling(step);
-        if (prevSibling && (prevSibling.type === types.IF || prevSibling.type === types.ELSEIF)) {
-            return prevSibling;
+    registerType(types.CONDITION = 'condition', function () {
+        function test(condition, index, list, scenario) {
+            if (!condition.expression || exports.parser.parse(condition.expression)(scenario.vars)) {
+                return condition.steps;
+            }
         }
-        return null;
-    }
 
-    register(types.IF = 'if', {
-            increment: 10,
-            expectedTime: 50,
-            maxTime: 500
-        },
-        function ifHandler(step) {
-            return step.override || ex.statuses.PASS;
-        }
-    );
-    register(types.ELSEIF = 'elseif', {
-            increment: 10,
-            expectedTime: 50,
-            maxTime: 500
-        },
-        function elseIfHandler(step, dependency) {
-            return step.override || ex.statuses.PASS;
-        },
-        handleDependency
-    );
-    register(types.ELSE = 'else', {
-            increment: 10,
-            expectedTime: 50,
-            maxTime: 500
-        },
-        function elseHandler(step, dependency) {
-            return step.override || ex.statuses.PASS;
-        },
-        handleDependency
-    );
+        return {
+            options: {
+                conditions: [],
+                increment: 1,
+                expectedTime: 2,
+                maxTime: 10
+            },
+            preExec: ['scenario', function (scenario) {
+                this.steps = exports.each(this.conditions, test, scenario);
+                return statuses.PASS;
+            }]
+        };
+    });
 }());

@@ -8,14 +8,336 @@
 var ex = exports.runner = exports.runner || {};
 
 ex.events = {
-    START: "runner:start",
-    STOP: "runner:stop",
-    UPDATE: "runner:update",
-    RESET: "runner:reset",
-    DONE: "runner:done",
-    START_RECORDING: "runner:startRecording",
-    STOP_RECORDING: "runner:stopRecording"
+    admin: {
+        START: "runner:start",
+        STOP: "runner:stop",
+        UPDATE: "runner:update",
+        RESET: "runner:reset",
+        DONE: "runner:done",
+        START_RECORDING: "runner:startRecording",
+        STOP_RECORDING: "runner:stopRecording",
+        LOAD_TEST: "runner:loadTest",
+        REGISTER_SCENARIO: "runner:registerScenario"
+    },
+    runner: {
+        ON_START: "runner:onStart",
+        ON_STOP: "runner:onStop",
+        ON_UPDATE: "runner:onUpdate",
+        ON_RESET: "runner:onReset",
+        ON_DONE: "runner:onDone",
+        ON_START_RECORDING: "runner:onStartRecording",
+        ON_STOP_RECORDING: "runner:onStopRecording",
+        ON_LOAD_TEST: "runner:onLoadTest",
+        ON_REGISTER_SCENARIO: "runner:onRegisterScenario"
+    }
 };
+
+(function(global, factory) {
+    global.printStackTrace = factory();
+})(this || exports, function() {
+    function printStackTrace(options) {
+        options = options || {
+            guess: true
+        };
+        var ex = options.e || null, guess = !!options.guess;
+        var p = new printStackTrace.implementation(), result = p.run(ex);
+        return guess ? p.guessAnonymousFunctions(result) : result;
+    }
+    printStackTrace.implementation = function() {};
+    printStackTrace.implementation.prototype = {
+        run: function(ex, mode) {
+            ex = ex || this.createException();
+            mode = mode || this.mode(ex);
+            if (mode === "other") {
+                return this.other(arguments.callee);
+            } else {
+                return this[mode](ex);
+            }
+        },
+        createException: function() {
+            try {
+                this.undef();
+            } catch (e) {
+                return e;
+            }
+        },
+        mode: function(e) {
+            if (e["arguments"] && e.stack) {
+                return "chrome";
+            }
+            if (e.stack && e.sourceURL) {
+                return "safari";
+            }
+            if (e.stack && e.number) {
+                return "ie";
+            }
+            if (e.stack && e.fileName) {
+                return "firefox";
+            }
+            if (e.message && e["opera#sourceloc"]) {
+                if (!e.stacktrace) {
+                    return "opera9";
+                }
+                if (e.message.indexOf("\n") > -1 && e.message.split("\n").length > e.stacktrace.split("\n").length) {
+                    return "opera9";
+                }
+                return "opera10a";
+            }
+            if (e.message && e.stack && e.stacktrace) {
+                if (e.stacktrace.indexOf("called from line") < 0) {
+                    return "opera10b";
+                }
+                return "opera11";
+            }
+            if (e.stack && !e.fileName) {
+                return "chrome";
+            }
+            return "other";
+        },
+        instrumentFunction: function(context, functionName, callback) {
+            context = context || window;
+            var original = context[functionName];
+            context[functionName] = function instrumented() {
+                callback.call(this, printStackTrace().slice(4));
+                return context[functionName]._instrumented.apply(this, arguments);
+            };
+            context[functionName]._instrumented = original;
+        },
+        deinstrumentFunction: function(context, functionName) {
+            if (context[functionName].constructor === Function && context[functionName]._instrumented && context[functionName]._instrumented.constructor === Function) {
+                context[functionName] = context[functionName]._instrumented;
+            }
+        },
+        chrome: function(e) {
+            return (e.stack + "\n").replace(/^[\s\S]+?\s+at\s+/, " at ").replace(/^\s+(at eval )?at\s+/gm, "").replace(/^([^\(]+?)([\n$])/gm, "{anonymous}() ($1)$2").replace(/^Object.<anonymous>\s*\(([^\)]+)\)/gm, "{anonymous}() ($1)").replace(/^(.+) \((.+)\)$/gm, "$1@$2").split("\n").slice(0, -1);
+        },
+        safari: function(e) {
+            return e.stack.replace(/\[native code\]\n/m, "").replace(/^(?=\w+Error\:).*$\n/m, "").replace(/^@/gm, "{anonymous}()@").split("\n");
+        },
+        ie: function(e) {
+            return e.stack.replace(/^\s*at\s+(.*)$/gm, "$1").replace(/^Anonymous function\s+/gm, "{anonymous}() ").replace(/^(.+)\s+\((.+)\)$/gm, "$1@$2").split("\n").slice(1);
+        },
+        firefox: function(e) {
+            return e.stack.replace(/(?:\n@:0)?\s+$/m, "").replace(/^(?:\((\S*)\))?@/gm, "{anonymous}($1)@").split("\n");
+        },
+        opera11: function(e) {
+            var ANON = "{anonymous}", lineRE = /^.*line (\d+), column (\d+)(?: in (.+))? in (\S+):$/;
+            var lines = e.stacktrace.split("\n"), result = [];
+            for (var i = 0, len = lines.length; i < len; i += 2) {
+                var match = lineRE.exec(lines[i]);
+                if (match) {
+                    var location = match[4] + ":" + match[1] + ":" + match[2];
+                    var fnName = match[3] || "global code";
+                    fnName = fnName.replace(/<anonymous function: (\S+)>/, "$1").replace(/<anonymous function>/, ANON);
+                    result.push(fnName + "@" + location + " -- " + lines[i + 1].replace(/^\s+/, ""));
+                }
+            }
+            return result;
+        },
+        opera10b: function(e) {
+            var lineRE = /^(.*)@(.+):(\d+)$/;
+            var lines = e.stacktrace.split("\n"), result = [];
+            for (var i = 0, len = lines.length; i < len; i++) {
+                var match = lineRE.exec(lines[i]);
+                if (match) {
+                    var fnName = match[1] ? match[1] + "()" : "global code";
+                    result.push(fnName + "@" + match[2] + ":" + match[3]);
+                }
+            }
+            return result;
+        },
+        opera10a: function(e) {
+            var ANON = "{anonymous}", lineRE = /Line (\d+).*script (?:in )?(\S+)(?:: In function (\S+))?$/i;
+            var lines = e.stacktrace.split("\n"), result = [];
+            for (var i = 0, len = lines.length; i < len; i += 2) {
+                var match = lineRE.exec(lines[i]);
+                if (match) {
+                    var fnName = match[3] || ANON;
+                    result.push(fnName + "()@" + match[2] + ":" + match[1] + " -- " + lines[i + 1].replace(/^\s+/, ""));
+                }
+            }
+            return result;
+        },
+        opera9: function(e) {
+            var ANON = "{anonymous}", lineRE = /Line (\d+).*script (?:in )?(\S+)/i;
+            var lines = e.message.split("\n"), result = [];
+            for (var i = 2, len = lines.length; i < len; i += 2) {
+                var match = lineRE.exec(lines[i]);
+                if (match) {
+                    result.push(ANON + "()@" + match[2] + ":" + match[1] + " -- " + lines[i + 1].replace(/^\s+/, ""));
+                }
+            }
+            return result;
+        },
+        other: function(curr) {
+            var ANON = "{anonymous}", fnRE = /function(?:\s+([\w$]+))?\s*\(/, stack = [], fn, args, maxStackSize = 10;
+            var slice = Array.prototype.slice;
+            while (curr && stack.length < maxStackSize) {
+                fn = fnRE.test(curr.toString()) ? RegExp.$1 || ANON : ANON;
+                try {
+                    args = slice.call(curr["arguments"] || []);
+                } catch (e) {
+                    args = [ "Cannot access arguments: " + e ];
+                }
+                stack[stack.length] = fn + "(" + this.stringifyArguments(args) + ")";
+                try {
+                    curr = curr.caller;
+                } catch (e) {
+                    stack[stack.length] = "Cannot access caller: " + e;
+                    break;
+                }
+            }
+            return stack;
+        },
+        stringifyArguments: function(args) {
+            var result = [];
+            var slice = Array.prototype.slice;
+            for (var i = 0; i < args.length; ++i) {
+                var arg = args[i];
+                if (arg === undefined) {
+                    result[i] = "undefined";
+                } else if (arg === null) {
+                    result[i] = "null";
+                } else if (arg.constructor) {
+                    if (arg.constructor === Array) {
+                        if (arg.length < 3) {
+                            result[i] = "[" + this.stringifyArguments(arg) + "]";
+                        } else {
+                            result[i] = "[" + this.stringifyArguments(slice.call(arg, 0, 1)) + "..." + this.stringifyArguments(slice.call(arg, -1)) + "]";
+                        }
+                    } else if (arg.constructor === Object) {
+                        result[i] = "#object";
+                    } else if (arg.constructor === Function) {
+                        result[i] = "#function";
+                    } else if (arg.constructor === String) {
+                        result[i] = '"' + arg + '"';
+                    } else if (arg.constructor === Number) {
+                        result[i] = arg;
+                    } else {
+                        result[i] = "?";
+                    }
+                }
+            }
+            return result.join(",");
+        },
+        sourceCache: {},
+        ajax: function(url) {
+            var req = this.createXMLHTTPObject();
+            if (req) {
+                try {
+                    req.open("GET", url, false);
+                    req.send(null);
+                    return req.responseText;
+                } catch (e) {}
+            }
+            return "";
+        },
+        createXMLHTTPObject: function() {
+            var xmlhttp, XMLHttpFactories = [ function() {
+                return new XMLHttpRequest();
+            }, function() {
+                return new ActiveXObject("Msxml2.XMLHTTP");
+            }, function() {
+                return new ActiveXObject("Msxml3.XMLHTTP");
+            }, function() {
+                return new ActiveXObject("Microsoft.XMLHTTP");
+            } ];
+            for (var i = 0; i < XMLHttpFactories.length; i++) {
+                try {
+                    xmlhttp = XMLHttpFactories[i]();
+                    this.createXMLHTTPObject = XMLHttpFactories[i];
+                    return xmlhttp;
+                } catch (e) {}
+            }
+        },
+        isSameDomain: function(url) {
+            return typeof location !== "undefined" && url.indexOf(location.hostname) !== -1;
+        },
+        getSource: function(url) {
+            if (!(url in this.sourceCache)) {
+                this.sourceCache[url] = this.ajax(url).split("\n");
+            }
+            return this.sourceCache[url];
+        },
+        guessAnonymousFunctions: function(stack) {
+            for (var i = 0; i < stack.length; ++i) {
+                var reStack = /\{anonymous\}\(.*\)@(.*)/, reRef = /^(.*?)(?::(\d+))(?::(\d+))?(?: -- .+)?$/, frame = stack[i], ref = reStack.exec(frame);
+                if (ref) {
+                    var m = reRef.exec(ref[1]);
+                    if (m) {
+                        var file = m[1], lineno = m[2], charno = m[3] || 0;
+                        if (file && this.isSameDomain(file) && lineno) {
+                            var functionName = this.guessAnonymousFunction(file, lineno, charno);
+                            stack[i] = frame.replace("{anonymous}", functionName);
+                        }
+                    }
+                }
+            }
+            return stack;
+        },
+        guessAnonymousFunction: function(url, lineNo, charNo) {
+            var ret;
+            try {
+                ret = this.findFunctionName(this.getSource(url), lineNo);
+            } catch (e) {
+                ret = "getSource failed with url: " + url + ", exception: " + e.toString();
+            }
+            return ret;
+        },
+        findFunctionName: function(source, lineNo) {
+            var reFunctionDeclaration = /function\s+([^(]*?)\s*\(([^)]*)\)/;
+            var reFunctionExpression = /['"]?([$_A-Za-z][$_A-Za-z0-9]*)['"]?\s*[:=]\s*function\b/;
+            var reFunctionEvaluation = /['"]?([$_A-Za-z][$_A-Za-z0-9]*)['"]?\s*[:=]\s*(?:eval|new Function)\b/;
+            var code = "", line, maxLines = Math.min(lineNo, 20), m, commentPos;
+            for (var i = 0; i < maxLines; ++i) {
+                line = source[lineNo - i - 1];
+                commentPos = line.indexOf("//");
+                if (commentPos >= 0) {
+                    line = line.substr(0, commentPos);
+                }
+                if (line) {
+                    code = line + code;
+                    m = reFunctionExpression.exec(code);
+                    if (m && m[1]) {
+                        return m[1];
+                    }
+                    m = reFunctionDeclaration.exec(code);
+                    if (m && m[1]) {
+                        return m[1];
+                    }
+                    m = reFunctionEvaluation.exec(code);
+                    if (m && m[1]) {
+                        return m[1];
+                    }
+                }
+            }
+            return "(?)";
+        }
+    };
+    return printStackTrace;
+});
+
+function count(item) {
+    var i, c = 0;
+    for (i in item) {
+        if (item.hasOwnProperty(i)) {
+            c += 1;
+        }
+    }
+    return c;
+}
+
+ex.count = count;
+
+function countAsArray(item) {
+    var i = 0;
+    while (item[i] !== undefined) {
+        i += 1;
+    }
+    return i;
+}
+
+ex.countAsArray = countAsArray;
 
 function dispatcher(target, scope, map) {
     var listeners = {};
@@ -141,17 +463,25 @@ exports.each = each;
 
 function extend(destination, source) {
     var args = exports.util.array.toArray(arguments), i = 1, len = args.length, item, j;
+    var options = this || {};
     while (i < len) {
         item = args[i];
         for (j in item) {
-            if (destination[j] && typeof destination[j] === "object") {
-                destination[j] = extend(destination[j], item[j]);
-            } else if (item[j] instanceof Array) {
-                destination[j] = extend(destination[j] || [], item[j]);
-            } else if (item[j] && typeof item[j] === "object") {
-                destination[j] = extend(destination[j] || {}, item[j]);
-            } else {
-                destination[j] = item[j];
+            if (item.hasOwnProperty(j)) {
+                if (destination[j] && typeof destination[j] === "object") {
+                    destination[j] = extend.apply(options, [ destination[j], item[j] ]);
+                } else if (item[j] instanceof Array) {
+                    destination[j] = destination[j] || (options && options.arrayAsObject ? {
+                        length: item[j].length
+                    } : []);
+                    if (item[j].length) {
+                        destination[j] = extend.apply(options, [ destination[j], item[j] ]);
+                    }
+                } else if (item[j] && typeof item[j] === "object") {
+                    destination[j] = extend.apply(options, [ destination[j] || {}, item[j] ]);
+                } else {
+                    destination[j] = item[j];
+                }
             }
         }
         i += 1;
@@ -175,6 +505,16 @@ var _;
             arrayPool.push(array);
         }
     }
+    var forIn = function(collection, callback, thisArg) {
+        var index, iterable = collection, result = iterable;
+        if (!iterable) return result;
+        if (!objectTypes[typeof iterable]) return result;
+        callback = callback && typeof thisArg == "undefined" ? callback : baseCreateCallback(callback, thisArg, 3);
+        for (index in iterable) {
+            if (callback(iterable[index], index, collection) === false) return result;
+        }
+        return result;
+    };
     if (window._) {
         _ = window._;
     } else {
@@ -435,7 +775,7 @@ exports.data.diff = function(source, compare) {
 var csl = function() {
     var api = {};
     function log(step) {
-        var depth = step.uid.split(".").length, args = exports.util.array.toArray(arguments), str = charPack("	", depth) + step.uid + ":" + step.type + ":" + step.status + ":" + step.state + ":" + step.progress + "::";
+        var depth = step.uid.split(".").length, args = exports.util.array.toArray(arguments), str = charPack("	", depth) + step.uid + ":" + step.type + ":" + step.status + ":" + step.state + ":[" + step.progress + "]::";
         args.shift();
         args[0] = str + args[0];
         console.log.apply(console, args);
@@ -451,38 +791,629 @@ var csl = function() {
     return api;
 }();
 
-var types = {
-    ROOT: "root",
-    STEP: "step",
-    VAR: "var",
-    FIND: "find",
-    FIND_TEXT: "findText",
-    FIND_VAL: "findVal",
-    ASSERT: "assert",
-    EXPECT: "expect",
-    IF: "if",
-    ELSEIF: "elseif",
-    ELSE: "else",
-    AJAX: "ajax",
-    PATH: "path",
-    PAGE: "page",
-    SOCKET: "socket"
-}, statuses = {
+var types = {}, statuses = {
     UNRESOLVED: "unresolved",
     FAIL: "fail",
     PASS: "pass",
-    TIMED_OUT: "timedOut",
-    SKIP: "skip"
+    TIMED_OUT: "timedOut"
 }, states = {
     WAITING: "waiting",
-    ENTERING: "entering",
-    RUNNING: "running",
+    PRE_EXEC: "preExec",
+    EXEC_CHILDREN: "execChildren",
+    POST_EXEC: "postExec",
     COMPLETE: "complete"
-}, stepsProp = "steps", events = ex.events, dependencyProp = "_depencency", typeConfigs = {};
+}, stepsProp = "steps", events = ex.events, dependencyProp = "_depencency", reservedTypes = {
+    "if": true,
+    elseif: true,
+    "else": true
+}, typeConfigs = {}, typeData = {}, scenarios = {}, pre = "pre", post = "post", win = window, doc = win.document;
 
-function MethodAPI(dispatcher) {
-    this.dispatcher = dispatcher;
+function nextState(step) {
+    if (step.state === states.WAITING) {
+        setState(step, states.PRE_EXEC);
+    } else if (step.state === states.PRE_EXEC) {
+        setState(step, states.EXEC_CHILDREN);
+    } else if (step.state === states.EXEC_CHILDREN) {
+        setState(step, states.POST_EXEC);
+    } else if (step.state === states.POST_EXEC) {
+        setState(step, states.COMPLETE);
+    } else {
+        throw new Error("Cannot proceed to next state.");
+    }
 }
+
+function setState(step, state) {
+    var data = typeData[step.type];
+    if (!state) {
+        throw new Error('Invalid State "' + state + '"');
+    }
+    step.stateHistory.push(step.state);
+    step.state = state;
+    if (data.onStateChange) execM(step, "onStateChange", {
+        state: step.state,
+        prevState: step.stateHistory[step.stateHistory.length - 1]
+    });
+}
+
+function execM(step, methodName, locals) {
+    var result;
+    if (typeData[step.type][methodName]) {
+        try {
+            result = invoke(typeData[step.type][methodName], step, locals);
+        } catch (e) {
+            handleError(step, e);
+        }
+    }
+    return result;
+}
+
+function hasHistoryState(step, state) {
+    return step.stateHistory.indexOf(state) !== -1;
+}
+
+function handleError(step, e) {
+    var error = {
+        message: e.toString(),
+        stackTrace: exports.printStackTrace(e)
+    };
+    step.errors = step.errors || [];
+    step.errors.push(error);
+    if (ex.options.stopOnError) {
+        invoke(ex.stop, step, {
+            error: error
+        });
+    }
+}
+
+function invoke(fn, scope, locals) {
+    if (!fn.$inject) {
+        fn.$inject = getInjectionArgs(fn);
+    }
+    var args = fn.$inject.slice();
+    exports.each(args, getInjection, scope, locals);
+    return fn.apply(scope, args);
+}
+
+function getInjectionArgs(fn) {
+    var str = fn.toString();
+    return str.match(/\(.*\)/)[0].match(/([\$\w])+/gm);
+}
+
+function getInjection(type, index, list, step, locals) {
+    var result;
+    if (types[type.toUpperCase()]) {
+        result = ex.getParentOfType(step, type);
+    } else if (locals && locals[type]) {
+        result = locals[type];
+    }
+    list[index] = result;
+}
+
+function Path() {
+    var selected, root, values = [], pendingProgressChanges, lastStep;
+    function setData(rootStep) {
+        selected = root = rootStep;
+    }
+    function setPath(path) {
+        var step = root;
+        exports.each(path, function(pathIndex) {
+            pathIndex = parseInt(pathIndex, 10);
+            step.childIndex = pathIndex;
+            step = step[stepsProp][pathIndex];
+            values.push(pathIndex);
+            selected = step;
+            nextState(selected);
+        });
+    }
+    function getPath(offShift) {
+        if (offShift) {
+            return values.slice(0, offShift);
+        }
+        return values;
+    }
+    function getSelected() {
+        return selected;
+    }
+    function getDepth() {
+        return values.length;
+    }
+    function next() {
+        if (!selected) {
+            select(root);
+        }
+        if (selectNextChild() || selectNextSibling() || selectParent()) {
+            return;
+        }
+        if (selected === root) {
+            return;
+        } else {
+            next();
+        }
+    }
+    function uidToPath(step) {
+        var path = step.uid.split("."), i = 0, len = path.length - 1;
+        path.shift();
+        while (i < len) {
+            path[i] = parseInt(path[i], 10);
+            i += 1;
+        }
+        return path;
+    }
+    function select(step) {
+        var parent, path = uidToPath(step), i = 0, len = path.length;
+        parent = getStepFromPath(path, 0, root, -1);
+        if (parent) {
+            parent.childIndex = path[len - 1] || 0;
+        }
+        values.length = 0;
+        while (i < len) {
+            values[i] = path[i];
+            i += 1;
+        }
+        selected = step;
+        nextState(selected);
+    }
+    function selectNextChild() {
+        var len = selected[stepsProp].length;
+        if (selected.childIndex >= len) {
+            return false;
+        }
+        if (len && selected.childIndex + 1 < len) {
+            select(selected[stepsProp][selected.childIndex + 1]);
+            return true;
+        }
+        selected.childrenComplete = true;
+        return false;
+    }
+    function selectParent() {
+        var step = getStepFromPath(values, 0, root, -1);
+        if (step) {
+            select(step);
+            return true;
+        }
+        return false;
+    }
+    function selectNextSibling() {
+        var step, len = values.length - 1;
+        values[len] += 1;
+        step = getStepFromPath(values, 0, root, 0);
+        if (step) {
+            select(step);
+            return true;
+        } else {
+            return selectParent();
+        }
+        return false;
+    }
+    function getStepFromPath(path, index, step, end) {
+        step = step || root;
+        index = index || 0;
+        end = end || 0;
+        var pathIndex = path[index];
+        if (index >= path.length + end) {
+            return step;
+        }
+        if (pathIndex !== undefined && step[stepsProp][pathIndex]) {
+            step = step[stepsProp][pathIndex];
+            return getStepFromPath(path, index + 1, step, end);
+        }
+        return null;
+    }
+    function getParentFrom(step) {
+        var path = uidToPath(step);
+        return path.length ? getStepFromPath(path, 0, root, -1) : root;
+    }
+    function getAllProgress() {
+        var changed = [];
+        _getAllProgress(root, null, null, changed);
+        return changed;
+    }
+    function _getAllProgress(step, index, list, changed) {
+        exports.each(step[stepsProp], _getAllProgress, changed);
+        updateProgress(step, changed);
+    }
+    function getRunPercent(step) {
+        var data = typeData[step.type], count = 0, limit = 0;
+        if (data.preExec) {
+            limit += 1;
+            count += step.state === states.EXEC_CHILDREN || step.state === states.POST_EXEC || step.state === states.COMPLETE ? 1 : 0;
+        }
+        if (data.postExec) {
+            limit += 1;
+            count += step.state === states.COMPLETE ? 1 : 0;
+        }
+        return count / limit;
+    }
+    function getProgressChanges(step, changed) {
+        changed = changed || pendingProgressChanges && pendingProgressChanges.slice() || [];
+        step = step || getSelected();
+        if (!step) {
+            return;
+        }
+        if (pendingProgressChanges) {
+            pendingProgressChanges = null;
+        }
+        updateProgress(step, changed);
+        var parent = getParentFrom(step);
+        if (parent && parent !== step) {
+            getProgressChanges(parent, changed);
+        }
+        return changed;
+    }
+    function updateProgress(step, changed) {
+        var len, childProgress, i = 0;
+        if (step.state === states.COMPLETE) {
+            step.progress = 1;
+        } else {
+            len = step[stepsProp].length;
+            if (len && step.childIndex !== -1) {
+                childProgress = 0;
+                while (i <= step.childIndex && i < len) {
+                    childProgress += step[stepsProp][i].progress;
+                    i += 1;
+                }
+                childProgress += getRunPercent(step);
+                len += 1;
+                step.progress = childProgress / len;
+            } else {
+                step.progress = getRunPercent(step);
+            }
+        }
+        changed.push(step);
+    }
+    function getTime() {
+        if (root) {
+            var result = getStepTime(root), avg = result.complete ? result.time / result.complete : 0, estimate = result.total * avg;
+            if (result.totalTime > estimate) {
+                estimate = result.totalTime;
+            }
+            return Math.ceil((estimate - result.time) * .001);
+        }
+        return 0;
+    }
+    function getStepTime(step) {
+        var complete = 0, total = 0, time = 0, totalTime = 0, result, i = 0, iLen = step[stepsProp].length;
+        while (i < iLen) {
+            if (step[stepsProp].length) {
+                result = getStepTime(step[stepsProp][i]);
+                complete += result.complete;
+                total += result.total;
+                time += result.time;
+                totalTime += result.totalTime;
+            }
+            complete += step.state === states.COMPLETE ? 1 : 0;
+            total += 1;
+            time += step.time;
+            totalTime += step.time || step.increment * 2;
+            i += 1;
+        }
+        return {
+            complete: complete,
+            total: total,
+            time: time,
+            totalTime: totalTime
+        };
+    }
+    this.setData = setData;
+    this.setPath = setPath;
+    this.getDepth = getDepth;
+    this.next = function() {
+        lastStep = getSelected();
+        return next();
+    };
+    this.getLastStep = function() {
+        return lastStep;
+    };
+    this.getSelected = getSelected;
+    this.getPath = getPath;
+    this.getProgressChanges = getProgressChanges;
+    this.getAllProgress = getAllProgress;
+    this.getTime = getTime;
+    this.getParent = getParentFrom;
+}
+
+function diffThrottle(runner, rootStep, activePath, throttle) {
+    var api = {}, diffRoot, lastEvent, lastTime = 0, intv;
+    throttle = throttle || 0;
+    function fire(evt) {
+        var now = Date.now(), then = lastTime + throttle;
+        clearTimeout(intv);
+        if (evt) {
+            lastEvent = evt;
+        }
+        if (now > then) {
+            lastTime = now;
+            run();
+        } else {
+            intv = setTimeout(fire, then - now);
+        }
+    }
+    function run() {
+        var path = activePath.getPath().join("."), exportData, myDiff;
+        rootStep.activePath = "R" + (path && "." + path || "");
+        activePath.getProgressChanges();
+        exportData = exportStep(rootStep);
+        myDiff = exports.data.diff(diffRoot, exportData);
+        diffRoot = exportData;
+        runner.dispatch(lastEvent, myDiff);
+    }
+    api.throttle = throttle;
+    api.fire = fire;
+    return api;
+}
+
+var registerAPI = {
+    onStateChange: true,
+    preExec: true,
+    postExec: true,
+    onError: true
+};
+
+function registerType(type, fn) {
+    var data;
+    if (typeConfigs[type]) {
+        throw new Error(type + " is already registered");
+    }
+    types[type.toUpperCase()] = type;
+    data = fn();
+    typeConfigs[type] = data.options;
+    typeData[type] = data;
+    exports.each(data, function(value, key, list) {
+        if (_.isArray(value)) {
+            var method = value.pop();
+            method.$inject = value;
+            list[key] = method;
+        } else {
+            value.$inject = [];
+        }
+    });
+}
+
+function registerScenario(scenario) {
+    var scn, parent, dict = scenarios;
+    if (scenario.uid) {
+        parent = ex.getParentOfType(scenario, types.SCENARIO);
+        if (parent) {
+            dict = parent.scenarios;
+        }
+    }
+    scn = exportStep(scenario, true);
+    if (dict[scn.name]) {
+        throw new Error("Scenario " + scn.name + " is already registered");
+    }
+    dict[scn.name] = scn;
+}
+
+function unregisterScenario(step, name) {
+    var parent = ex.getParentOfType(step, types.SCENARIO);
+    while (parent) {
+        if (parent.scenarios[name]) {
+            delete scenarios[name];
+            return;
+        }
+        parent = ex.getParentOfType(parent, types.SCENARIO);
+    }
+    delete scenarios[name];
+}
+
+function hasScenario(step, name) {
+    return !!getScenario(step, name);
+}
+
+function getScenario(step, name) {
+    var parent = ex.getParentOfType(step, types.SCENARIO);
+    while (parent) {
+        if (parent.scenarios[name]) {
+            return parent.scenarios[name];
+        }
+        parent = ex.getParentOfType(parent, types.SCENARIO);
+    }
+    return scenarios[name];
+}
+
+ex.registerType = registerType;
+
+ex.registerScenario = registerScenario;
+
+ex.unregisterScenario = unregisterScenario;
+
+ex.hasScenario = hasScenario;
+
+ex.getScenario = getScenario;
+
+registerType(types.STEP = "step", function() {
+    return {
+        options: {
+            label: "",
+            type: types.STEP,
+            status: statuses.UNRESOLVED,
+            state: states.WAITING,
+            stateHistory: [],
+            childIndex: -1,
+            startTime: 0,
+            time: 0,
+            increment: 50,
+            expectedTime: 100,
+            maxTime: 2e3,
+            progress: 0,
+            pre: {
+                count: 0,
+                limit: 0
+            },
+            post: {
+                count: 0,
+                limit: 0
+            }
+        },
+        preExec: function() {
+            return statuses.PASS;
+        }
+    };
+});
+
+registerType(types.ROOT = "root", function() {
+    return {
+        options: {},
+        preExec: function() {
+            return statuses.PASS;
+        }
+    };
+});
+
+(function() {
+    registerType(types.CONDITION = "condition", function() {
+        function test(condition, index, list, scenario) {
+            if (!condition.expression || exports.parser.parse(condition.expression)(scenario.vars)) {
+                return condition.steps;
+            }
+        }
+        return {
+            options: {
+                conditions: [],
+                increment: 1,
+                expectedTime: 2,
+                maxTime: 10
+            },
+            preExec: [ "scenario", function(scenario) {
+                this.steps = exports.each(this.conditions, test, scenario);
+                return statuses.PASS;
+            } ]
+        };
+    });
+})();
+
+registerType(types.FIND = "find", function() {
+    return {
+        options: {
+            maxTime: 1e4
+        },
+        preExec: function() {
+            this.element = exports.selector.query(this.query, doc);
+            this.element = this.element[0] || this.element;
+            return this.element ? statuses.PASS : statuses.FAIL;
+        }
+    };
+});
+
+registerType(types.VAL = "val", function() {
+    return {
+        options: {
+            maxTime: 1e4
+        },
+        preExec: [ "find", function(find) {
+            find.value = find.element.value;
+            return statuses.PASS;
+        } ]
+    };
+});
+
+registerType(types.TEXT = "text", function() {
+    return {
+        options: {
+            maxTime: 1e4
+        },
+        preExec: [ "find", function(find) {
+            find.text = find.element.innerText;
+            return statuses.PASS;
+        } ]
+    };
+});
+
+registerType(types.MOUSEDOWN = "mousedown", function() {
+    return {
+        options: {
+            maxTime: 1e4
+        },
+        preExec: [ "find", function(find) {
+            fireEvent(find.element, "mousedown");
+            return statuses.PASS;
+        } ]
+    };
+});
+
+registerType(types.MOUSEUP = "mouseup", function() {
+    return {
+        options: {
+            maxTime: 1e4
+        },
+        preExec: [ "find", function(find) {
+            fireEvent(find.element, "mouseup");
+            return statuses.PASS;
+        } ]
+    };
+});
+
+registerType(types.MOUSEOVER = "mouseover", function() {
+    return {
+        options: {
+            maxTime: 1e4
+        },
+        preExec: [ "find", function(find) {
+            fireEvent(find.element, "mouseover");
+            return statuses.PASS;
+        } ]
+    };
+});
+
+registerType(types.FOCUSIN = "focusin", function() {
+    return {
+        options: {
+            maxTime: 1e4
+        },
+        preExec: [ "find", function(find) {
+            fireEvent(find.element, "focusin");
+            return statuses.PASS;
+        } ]
+    };
+});
+
+registerType(types.FOCUSOUT = "focusout", function() {
+    return {
+        options: {
+            maxTime: 1e4
+        },
+        preExec: [ "find", function(find) {
+            fireEvent(find.element, "focusout");
+            return statuses.PASS;
+        } ]
+    };
+});
+
+registerType(types.CLICK = "click", function() {
+    return {
+        options: {
+            maxTime: 1e4
+        },
+        preExec: [ "find", function(find) {
+            fireEvent(find.element, "click");
+            return statuses.PASS;
+        } ]
+    };
+});
+
+registerType(types.TOBE = "toBe", function() {
+    return {
+        options: {
+            property: "value",
+            value: "",
+            increment: 1,
+            pre: {
+                limit: 1
+            },
+            maxTime: 10
+        },
+        preExec: [ "find", function(find) {
+            var value = find.element[this.property];
+            if (value !== this.value) {
+                throw new Error("Expected element." + this.property + ' of "' + value + '" to be "' + this.value + '".');
+            }
+            return statuses.PASS;
+        } ],
+        onError: [ "error", function(error) {
+            console.error("ON ERROR CALLED: %s", error.message);
+        } ]
+    };
+});
 
 function fireEvent(node, eventName) {
     var doc, event, bubbles, eventClass;
@@ -546,471 +1477,68 @@ var cb_addEventListener = function(obj, evt, fnc) {
     return false;
 };
 
-MethodAPI.prototype[types.ASSERT] = function(step) {
-    var condition = true;
-    return condition ? statuses.PASS : statuses.FAIL;
-};
-
-MethodAPI.prototype[types.EXPECT] = function(step) {
-    var lastStep = ex.getLastStep();
-    return lastStep.payload === step.data ? statuses.PASS : statuses.FAIL;
-};
-
-MethodAPI.prototype[types.FIND] = function(step) {
-    if (!step.data || typeof step.data !== "string") {
-        throw new Error("Invalid selector for step of type " + step.type);
-    }
-    var el = exports.selector.query(step.data);
-    step.element = el && el[0];
-    step.payload = el.length;
-    return !!step.element ? statuses.PASS : statuses.FAIL;
-};
-
-MethodAPI.prototype[types.FIND + "Val"] = function(step) {
-    var lastStep = ex.getLastStep();
-    step.element = lastStep.element;
-    step.payload = step.element.value;
-    return statuses.PASS;
-};
-
-MethodAPI.prototype[types.FIND + "Text"] = function(step) {
-    var lastStep = ex.getLastStep();
-    step.element = lastStep.element;
-    step.payload = step.element.innerText;
-    return statuses.PASS;
-};
-
-function Path() {
-    var selected, root, values = [], pendingProgressChanges, lastStep;
-    function setData(rootStep) {
-        selected = root = rootStep;
-    }
-    function setPath(path) {
-        var step = root;
-        exports.each(path, function(pathIndex) {
-            csl.log(step, "%s.childIndex = %s", step.label, pathIndex);
-            pathIndex = parseInt(pathIndex, 10);
-            step.childIndex = pathIndex;
-            step = step[stepsProp][pathIndex];
-            values.push(pathIndex);
-            selected = step;
-            selected.state = states.ENTERING;
-        });
-        csl.log(step, "values %s", values.join("."));
-    }
-    function getPath(offShift) {
-        if (offShift) {
-            return values.slice(0, offShift);
-        }
-        return values;
-    }
-    function getSelected() {
-        return selected;
-    }
-    function getDepth() {
-        return values.length;
-    }
-    function next() {
-        if (!selected) {
-            select(root);
-            csl.log("	%cRoot Start: %s", "color:#F90", selected.label);
-        }
-        if (selectNextChild() || selectNextSibling() || selectParent()) {
-            if (selected.status === statuses.SKIP) {
-                next();
+registerType(types.RUN = "run", function() {
+    return {
+        options: {
+            scenario: "",
+            maxTime: 100
+        },
+        preExec: function() {
+            var scenario = ex.getScenario(this, this.scenario);
+            if (!scenario) {
+                throw new Error("Unable to find " + types.SCENARIO + ' by name of "' + this.scenario + '"');
             }
-            return;
-        }
-        if (selected === root) {
-            csl.log(selected, "%cROOT: %s", "color:#F90", selected.label);
-            return;
-        } else {
-            next();
-        }
-    }
-    function uidToPath(step) {
-        var path = step.uid.split("."), i = 0, len = path.length - 1;
-        path.shift();
-        while (i < len) {
-            path[i] = parseInt(path[i], 10);
-            i += 1;
-        }
-        return path;
-    }
-    function select(step) {
-        var parent, path = uidToPath(step), i = 0, len = path.length;
-        parent = getStepFromPath(path, 0, root, -1);
-        if (parent) {
-            parent.childIndex = path[len - 1] || 0;
-        }
-        values.length = 0;
-        while (i < len) {
-            values[i] = path[i];
-            i += 1;
-        }
-        selected = step;
-        selected.state = states.ENTERING;
-    }
-    function selectNextChild() {
-        var len = selected[stepsProp].length;
-        if (selected.status === statuses.SKIP || selected.childIndex >= len) {
-            return false;
-        }
-        if (len && selected.childIndex + 1 < len) {
-            select(selected[stepsProp][selected.childIndex + 1]);
-            csl.log(selected, "%cgetNextChild: %s", "color:#F90", selected.label);
-            return true;
-        }
-        selected.childrenComplete = true;
-        return false;
-    }
-    function selectParent() {
-        var step = getStepFromPath(values, 0, root, -1);
-        if (step) {
-            select(step);
-            csl.log(selected, "%cgetParent: %s", "color:#F90", selected.label);
-            return true;
-        }
-        return false;
-    }
-    function selectNextSibling() {
-        var step, len = values.length - 1;
-        values[len] += 1;
-        step = getStepFromPath(values, 0, root, 0);
-        if (step) {
-            select(step);
-            csl.log(selected, "%cgetNextSibling: %s", "color:#F90", selected.label);
-            return true;
-        } else {
-            return selectParent();
-        }
-        return false;
-    }
-    function getStepFromPath(path, index, step, end) {
-        step = step || root;
-        index = index || 0;
-        end = end || 0;
-        var pathIndex = path[index];
-        if (index >= path.length + end) {
-            return step;
-        }
-        if (pathIndex !== undefined && step[stepsProp][pathIndex]) {
-            step = step[stepsProp][pathIndex];
-            return getStepFromPath(path, index + 1, step, end);
-        }
-        return null;
-    }
-    function getParentFrom(step) {
-        var path = uidToPath(step);
-        return path.length ? getStepFromPath(path, 0, root, -1) : root;
-    }
-    function getAllProgress() {
-        var changed = [];
-        _getAllProgress(root, null, null, changed);
-        return changed;
-    }
-    function _getAllProgress(step, index, list, changed) {
-        if (step.status === statuses.SKIP) {
-            exports.each(step[stepsProp], skipStep);
-        }
-        exports.each(step[stepsProp], _getAllProgress, changed);
-        updateProgress(step, changed);
-    }
-    function getRunPercent(step) {
-        return step.status === statuses.PASS ? 1 : step.time > step.maxTime ? 1 : step.time / step.maxTime;
-    }
-    function getProgressChanges(step, changed) {
-        changed = changed || pendingProgressChanges && pendingProgressChanges.slice() || [];
-        step = step || getSelected();
-        if (!step) {
-            return;
-        }
-        if (pendingProgressChanges) {
-            pendingProgressChanges = null;
-        }
-        updateProgress(step, changed);
-        var parent = getParentFrom(step);
-        if (parent && parent !== step) {
-            getProgressChanges(parent, changed);
-        }
-        return changed;
-    }
-    function storeProgressChanges(step) {
-        pendingProgressChanges = getProgressChanges(step);
-    }
-    function updateProgress(step, changed) {
-        var len, childProgress, i = 0;
-        if (step.status === statuses.SKIP) {
-            step.progress = 0;
-            return;
-        }
-        if (step.state === states.COMPLETE) {
-            step.progress = 1;
-        } else {
-            len = step[stepsProp].length;
-            if (len && step.childIndex !== -1) {
-                childProgress = 0;
-                step.skipCount = 0;
-                while (i <= step.childIndex && i < len) {
-                    if (step[stepsProp][i].status != statuses.SKIP) {
-                        childProgress += step[stepsProp][i].progress;
-                    } else {
-                        step.skipCount += 1;
-                    }
-                    i += 1;
-                }
-                childProgress += getRunPercent(step);
-                step.progress = childProgress / (len - step.skipCount + (step.type !== types.ROOT ? 1 : 0));
-            } else {
-                step.progress = getRunPercent(step);
+            if (scenario.uid) {
+                scenario = exportStep(scenario, true);
             }
-        }
-        changed.push(step);
-    }
-    function skipBlock() {
-        if (selected.type === types.IF || selected.type === types.ELSEIF || selected.type === types.ELSE) {
-            var parent = getStepFromPath(values, 0, root, -1);
-            if (selected.type === types.ELSEIF || selected.type === types.ELSE) {
-                skipPreDependentChildCondition(parent);
-            }
-            if (selected.type === types.IF || selected.type === types.ELSEIF) {
-                skipPostDependentCondition(parent);
-            }
-        }
-    }
-    function skipPreDependentChildCondition(parent) {
-        var j = parent.childIndex - 1, jLen = 0;
-        while (j >= jLen) {
-            var s = parent[stepsProp][j];
-            if (s.type === types.IF || s.type === types.ELSEIF) {
-                skipStep(s);
-            } else {
-                break;
-            }
-            j -= 1;
-        }
-    }
-    function skipPostDependentCondition(parent) {
-        var i = parent.childIndex + 1, iLen = parent[stepsProp].length;
-        while (i < iLen) {
-            var s = parent[stepsProp][i];
-            if (s.type === types.ELSEIF || s.type === types.ELSE) {
-                skipStep(s);
-            } else {
-                break;
-            }
-            i += 1;
-        }
-    }
-    function skipStep(step) {
-        if (step.status !== statuses.SKIP) {
-            csl.log(step, "%cSKIP %s", "color:#FF6600", step.uid);
-            step.status = statuses.SKIP;
-            storeProgressChanges(step);
-        }
-    }
-    function isCondition(step) {
-        return step.type === types.IF || step.type === types.ELSEIF || step.type === types.ELSE;
-    }
-    function getTime() {
-        var result = getStepTime(root), avg = result.complete ? result.time / result.complete : 0, estimate = result.total * avg;
-        if (result.totalTime > estimate) {
-            estimate = result.totalTime;
-        }
-        return Math.ceil((estimate - result.time) * .001);
-    }
-    function getStepTime(step) {
-        var complete = 0, total = 0, time = 0, totalTime = 0, result, i = 0, iLen = step[stepsProp].length;
-        while (i < iLen) {
-            if (step[stepsProp].length) {
-                result = getStepTime(step[stepsProp][i]);
-                complete += result.complete;
-                total += result.total;
-                time += result.time;
-                totalTime += result.totalTime;
-            }
-            complete += step.state === states.COMPLETE ? 1 : 0;
-            total += 1;
-            time += step.time;
-            totalTime += step.time || step.increment * 2;
-            i += 1;
-        }
-        return {
-            complete: complete,
-            total: total,
-            time: time,
-            totalTime: totalTime
-        };
-    }
-    this.setData = setData;
-    this.setPath = setPath;
-    this.getDepth = getDepth;
-    this.next = function() {
-        lastStep = getSelected();
-        return next();
+            this[stepsProp].push(importStep(scenario, 0, null, this.uid));
+            return ex.statuses.PASS;
+        },
+        postExec: [ "scenario", function(scenario) {
+            scenario.vars[this.name] = this.steps[0].vars;
+        } ],
+        onError: [ "error", "scenario", function(error, scenario) {} ]
     };
-    this.getLastStep = function() {
-        return lastStep;
+});
+
+registerType(types.SCENARIO = "scenario", function() {
+    return {
+        options: {
+            vars: {},
+            scenarios: {},
+            maxTime: 100
+        },
+        preExec: function scenarioHandler() {
+            if (!ex.hasScenario(this, this.name)) {
+                ex.registerScenario(this);
+            }
+            return ex.statuses.PASS;
+        }
     };
-    this.getSelected = getSelected;
-    this.getPath = getPath;
-    this.getProgressChanges = getProgressChanges;
-    this.getAllProgress = getAllProgress;
-    this.skipBlock = skipBlock;
-    this.isCondition = isCondition;
-    this.getTime = getTime;
-    this.getParent = getParentFrom;
-}
-
-function diffThrottle(runner, rootStep, activePath, throttle) {
-    var api = {}, diffRoot, lastEvent, lastTime = 0, intv;
-    throttle = throttle || 0;
-    function fire(evt) {
-        var now = Date.now(), then = lastTime + throttle;
-        clearTimeout(intv);
-        if (evt) {
-            console.log("%c%s", "color:#009900;", evt);
-            lastEvent = evt;
-        }
-        if (now > then) {
-            lastTime = now;
-            run();
-        } else {
-            intv = setTimeout(fire, then - now);
-        }
-    }
-    function run() {
-        var path = activePath.getPath().join("."), exportData, myDiff;
-        rootStep.activePath = "R" + (path && "." + path || "");
-        activePath.getProgressChanges();
-        exportData = exportStep(rootStep);
-        myDiff = exports.data.diff(diffRoot, exportData);
-        diffRoot = exportData;
-        runner.dispatch(lastEvent, myDiff);
-    }
-    api.throttle = throttle;
-    api.fire = fire;
-    return api;
-}
-
-function register(type, options, method, dependencyMethod) {
-    if (typeConfigs[type]) {
-        throw new Error(type + " is already registered");
-    }
-    types[type.toUpperCase()] = type;
-    typeConfigs[type] = options;
-    MethodAPI.prototype[type] = method;
-    if (dependencyMethod) {
-        MethodAPI.prototype[type + dependencyProp] = dependencyMethod;
-    }
-}
-
-register(types.STEP = "step", {
-    label: "",
-    type: types.STEP,
-    status: statuses.UNRESOLVED,
-    state: states.WAITING,
-    childIndex: -1,
-    skipCount: 0,
-    startTime: 0,
-    time: 0,
-    execCount: 0,
-    increment: 50,
-    expectedTime: 100,
-    maxTime: 2e3,
-    progress: 0
-}, function stepHandler(step) {
-    return ex.statuses.PASS;
 });
 
-register("root", {}, function rootHandler() {
-    return statuses.PASS;
-});
-
-(function() {
-    function handleDependency(step) {
-        var prevSibling = ex.getPrevSibling(step);
-        if (prevSibling && (prevSibling.type === types.IF || prevSibling.type === types.ELSEIF)) {
-            return prevSibling;
-        }
-        return null;
-    }
-    register(types.IF = "if", {
-        increment: 10,
-        expectedTime: 50,
-        maxTime: 500
-    }, function ifHandler(step) {
-        return step.override || ex.statuses.PASS;
-    });
-    register(types.ELSEIF = "elseif", {
-        increment: 10,
-        expectedTime: 50,
-        maxTime: 500
-    }, function elseIfHandler(step, dependency) {
-        return step.override || ex.statuses.PASS;
-    }, handleDependency);
-    register(types.ELSE = "else", {
-        increment: 10,
-        expectedTime: 50,
-        maxTime: 500
-    }, function elseHandler(step, dependency) {
-        return step.override || ex.statuses.PASS;
-    }, handleDependency);
-})();
-
-(function() {
-    function handleDependency(step) {
-        return ex.getParentOfType(step, types.FIND);
-    }
-    register(types.FIND = "find", {
-        maxTime: 1e4
-    }, function findHandler(step) {
-        return step.override || ex.statuses.PASS;
-    });
-    register(types.VAL = "val", {
-        maxTime: 1e4
-    }, function valHandler(step, depencency) {
-        return step.override || ex.statuses.PASS;
-    }, handleDependency);
-    register(types.TEXT = "text", {
-        maxTime: 1e4
-    }, function textHandler(step, dependency) {
-        return step.override || ex.statuses.PASS;
-    }, handleDependency);
-})();
-
-register(types.RUN = "run", {
-    scenario: "",
-    maxTime: 100
-}, function runHandler(step) {
-    return ex.statuses.PASS;
-});
-
-register(types.SCENARIO = "scenario", {
-    vars: {},
-    maxTime: 100
-}, function scenarioHandler(step) {
-    return ex.statuses.PASS;
-});
-
-register(types.SET = "set", {
-    property: "",
-    text: "",
-    maxTime: 1e3
-}, function stepHandler(step, dependency) {
-    if (dependency) {
-        dependency.vars[step.property] = step.text;
-    } else {
-        throw new Error('Type "' + types.SET + '" can only be used inside a scenario.');
-    }
-    return ex.statuses.PASS;
-}, function handleDependency(step) {
-    return ex.getParentOfType(step, types.SCENARIO);
+registerType(types.SET = "set", function() {
+    return {
+        options: {
+            property: "",
+            text: "",
+            increment: 0,
+            maxTime: 10
+        },
+        preExec: [ "scenario", function(scenario) {
+            if (scenario) {
+                scenario.vars[this.property] = this.text;
+            } else {
+                throw new Error('Type "' + types.SET + '" can only be used inside a scenario.');
+            }
+            return ex.statuses.PASS;
+        } ]
+    };
 });
 
 function runner(api) {
     dispatcher(api);
-    var rootPrefix = "R", methods = new MethodAPI(api), activePath = new Path(), options = {
+    var rootPrefix = "R", activePath = new Path(), options = {
         async: true
     }, intv, _steps, rootStep = importStep({
         uid: rootPrefix,
@@ -1022,8 +1550,8 @@ function runner(api) {
     function getSteps() {
         return rootStep[stepsProp];
     }
-    function setSteps(steps) {
-        _steps = steps;
+    function loadTest(steps) {
+        _steps = _.isArray(steps) ? steps : [ steps ];
         reset();
     }
     function reset() {
@@ -1031,13 +1559,14 @@ function runner(api) {
         applySteps(_steps);
         updateTime(rootStep);
         rootStep.timeLeft = activePath.getTime();
-        change(events.RESET);
+        change(events.runner.ON_RESET);
     }
     function applySteps(steps) {
-        var mySteps = exports.each(steps.slice(), importStep, rootPrefix);
-        rootStep[stepsProp] = mySteps;
-        csl.log(rootStep, "");
-        activePath.setData(rootStep);
+        if (steps) {
+            var mySteps = exports.each(steps.slice ? steps.slice() : steps, importStep, rootPrefix);
+            rootStep[stepsProp] = mySteps;
+            activePath.setData(rootStep);
+        }
     }
     function start(path) {
         if (!options.async) {
@@ -1049,14 +1578,17 @@ function runner(api) {
             activePath.setPath([ 0 ]);
         }
         csl.log(activePath.getSelected(), "start %s", activePath.getSelected().label);
-        change(events.START);
+        change(events.runner.ON_START);
         go();
     }
-    function stop() {
+    function stop(error) {
         if (intv) {
+            if (error && console && console.log) {
+                console.log("RUNNER STOPPED ON ERROR: " + error.message);
+            }
             clearTimeout(intv);
             intv = 0;
-            change(events.STOP);
+            change(events.runner.ON_STOP);
         }
     }
     function resume() {
@@ -1077,40 +1609,40 @@ function runner(api) {
     }
     function run() {
         var activeStep = activePath.getSelected();
-        csl.log(activeStep, "run %s state:%s", activeStep.label, activeStep.state);
+        csl.log(activeStep, "%s:%s", activeStep.uid, activeStep.state);
         updateTime(activeStep);
-        if (activePath.isCondition(activeStep)) {
-            if (activeStep.status === statuses.SKIP) {
-                activeStep.progress = 0;
-                next();
-            } else if (activeStep.state === states.COMPLETE) {
-                next();
-            } else if (activeStep.status !== statuses.PASS) {
-                exec(activeStep, checkDependency(activeStep));
-            } else if (activeStep[stepsProp].length && activeStep.childIndex < activeStep[stepsProp].length - 1) {
-                next();
-            } else if (isExpired(activeStep)) {
-                activeStep.state = states.COMPLETE;
-                completeStep(activeStep);
-            } else {
+        if (activeStep.state === states.COMPLETE) {
+            completeStep(activeStep);
+        } else if (activeStep.state === states.PRE_EXEC && !overLimit(activeStep, pre)) {
+            if (isExpired(activeStep)) {
                 expire(activeStep);
+            } else {
+                exec(activeStep, pre);
             }
-        } else {
+        } else if (activeStep.state === states.POST_EXEC && !overLimit(activeStep, post)) {
+            if (isExpired(activeStep)) {
+                expire(activeStep);
+            } else {
+                exec(activeStep, post);
+            }
+        } else if (activeStep.state === states.EXEC_CHILDREN) {
             if (activeStep[stepsProp].length && activeStep.childIndex === -1) {
                 activePath.next();
-            } else if (activeStep.state === states.COMPLETE) {
-                completeStep(activeStep);
-            } else if (!isExpired(activeStep)) {
-                exec(activeStep, checkDependency(activeStep));
             } else {
-                expire(activeStep);
+                nextState(activeStep);
+                if (activeStep.type === types.ROOT) {
+                    api.stop();
+                    change(events.runner.ON_DONE);
+                }
             }
+        } else {
+            nextState(activeStep);
         }
         if (!intv) {
             return;
         }
         updateTime(activeStep);
-        change(events.UPDATE);
+        change(events.runner.ON_UPDATE);
         go();
     }
     function next() {
@@ -1119,38 +1651,30 @@ function runner(api) {
         change();
     }
     function isExpired(step) {
-        return step.execCount * step.increment > step.maxTime;
-    }
-    function checkDependency(activeStep) {
-        var result;
-        if (MethodAPI.prototype[activeStep.type + dependencyProp]) {
-            result = MethodAPI.prototype[activeStep.type + dependencyProp](activeStep);
-            if (result) {
-                return result;
-            }
-            throw new Error('Dependency Failure: "' + activeStep + '" unable to fetch dependency.');
+        if (step.state === states.PRE_EXEC) {
+            return step.pre.count * step.increment > step.maxTime;
+        } else if (step.state === states.POST_EXEC) {
+            return step.post.count * step.increment > step.maxTime;
         }
-        return;
+        return true;
     }
-    function exec(activeStep, dependency) {
-        activeStep.state = states.RUNNING;
-        csl.log(activeStep, "run method %s", activeStep.type);
-        activeStep.status = methods[activeStep.type](activeStep, dependency);
-        activeStep.execCount += 1;
+    function overLimit(step, type) {
+        var data = step[type];
+        return !!(data && data.limit && data.count >= data.limit);
+    }
+    function exec(activeStep, type) {
+        var method = type + "Exec", response = execM(activeStep, method);
+        if (response) {
+            activeStep.status = response;
+        }
+        activeStep[type].count += 1;
         if (activeStep.status === statuses.PASS) {
-            activeStep.state = states.COMPLETE;
-            activePath.skipBlock();
-            csl.log(activeStep, "pass %s", activeStep.label);
-            if (activeStep.type === types.ROOT) {
-                api.stop();
-                change(events.DONE);
-            }
+            nextState(activeStep);
         } else if (isExpired(activeStep)) {
             expire(activeStep);
         }
     }
     function completeStep(activeStep) {
-        csl.log(activeStep, "complete %s", activeStep.label);
         if (activeStep.type === types.ROOT) {
             api.stop();
             return;
@@ -1158,17 +1682,14 @@ function runner(api) {
         next();
     }
     function expire(step) {
-        csl.log(activePath.getSelected(), "run expired");
         updateTime(step);
-        csl.log(activePath.getSelected(), "expired %s %s/%s", step.label, step.time, step.maxTime);
-        step.status = activePath.isCondition(step) ? statuses.SKIP : statuses.TIMED_OUT;
-        step.state = states.COMPLETE;
+        step.status = statuses.TIMED_OUT;
+        nextState(step);
     }
     function updateTime(step) {
         var now = Date.now();
         if (!step.startTime) step.startTime = now;
         step.time = now - step.startTime;
-        csl.log(activePath.getSelected(), "updateTime %s %s/%s", step.label, step.time, step.maxTime);
     }
     function getStepFromPath(path, index, step) {
         step = step || rootStep;
@@ -1183,16 +1704,18 @@ function runner(api) {
     function change(evt) {
         differ.fire(evt);
     }
+    api.options = {
+        stopOnError: true
+    };
     api.types = types;
     api.states = states;
     api.statuses = statuses;
-    api.register = register;
     api.start = start;
     api.stop = stop;
     api.resume = resume;
     api.reset = reset;
     api.getSteps = getSteps;
-    api.setSteps = setSteps;
+    api.loadTest = loadTest;
     api.getParent = activePath.getParent;
     api.getParentOfType = function(step, type) {
         var parent = ex.getParent(step);
@@ -1223,25 +1746,21 @@ function runner(api) {
     api.getLastStep = function() {
         return activePath.getLastStep();
     };
+    api.throwError = function(step, message) {
+        execM(step, "onError", {
+            error: {
+                type: "internal",
+                message: message
+            }
+        });
+    };
+    win.addEventListener("error", function(error) {
+        handleError(rootStep, error);
+    });
     return api;
 }
 
 runner(ex);
-
-var justInTimeOnly = {
-    $$hashKey: true,
-    element: true
-}, omitOnSave = {
-    $$hashKey: true,
-    uid: true,
-    index: true,
-    state: true,
-    status: true,
-    progress: true,
-    time: true,
-    startTime: true,
-    timeCount: true
-};
 
 function importStep(options, index, list, parentPath) {
     console.log("	step %s", options.label);
@@ -1251,9 +1770,22 @@ function importStep(options, index, list, parentPath) {
     item.uid = uid;
     item.index = index;
     item.type = item.type || types.STEP;
+    if (options.hasOwnProperty(stepsProp) && !(options[stepsProp] instanceof Array) && options[stepsProp].length === 1) {
+        options[stepsProp] = [ options[stepsProp] ];
+    }
     children = options[stepsProp];
     exports.extend(item, typeConfigs[types.STEP], typeConfigs[options.type] || {}, options);
     if (list) list[index] = item;
+    if (item.conditions && item.conditions.length) {
+        var j = 0, jLen = item.conditions.length;
+        while (j < jLen) {
+            if (!item.conditions[j].steps.isArray) {
+                item.conditions[j].steps = [ item.conditions[j].steps ];
+            }
+            exports.each(item.conditions[j].steps, importStep, uid);
+            j += 1;
+        }
+    }
     if (children && children.length) {
         i = 0;
         iLen = item[stepsProp].length;
@@ -1270,6 +1802,28 @@ function importStep(options, index, list, parentPath) {
     }
 }
 
+var justInTimeOnly = {
+    $$hashKey: true,
+    element: true,
+    stateHistory: true,
+    $inject: true
+}, omitOnSave = {
+    $$hashKey: true,
+    uid: true,
+    index: true,
+    state: true,
+    status: true,
+    progress: true,
+    time: true,
+    startTime: true,
+    timeCount: true,
+    stateHistory: true
+}, directExport = {
+    errors: true,
+    pre: true,
+    post: true
+};
+
 function exportStep(step, clearJIT, result) {
     return _exportSteps(step, null, null, null, clearJIT ? omitOnSave : justInTimeOnly, result);
 }
@@ -1279,7 +1833,11 @@ function _exportSteps(step, index, list, outList, omits, out) {
     var defaultProps, prop;
     defaultProps = typeConfigs[step.type];
     if (!defaultProps) {
-        throw new Error('Unsupported step type "' + step.type + '"');
+        if (reservedTypes[step.type]) {
+            defaultProps = {};
+        } else {
+            throw new Error('Unsupported step type "' + step.type + '"');
+        }
     }
     for (prop in step) {
         if (omits[prop]) {} else if (step[prop] && step[prop].isArray) {
@@ -1287,7 +1845,13 @@ function _exportSteps(step, index, list, outList, omits, out) {
                 length: step[prop].length
             };
             if (step[prop].length) {
-                exports.each(step[prop], _exportSteps, out[prop], omits);
+                if (directExport[prop]) {
+                    out[prop] = exports.extend.apply({
+                        arrayAsObject: true
+                    }, [ {}, step[prop] ]);
+                } else {
+                    exports.each(step[prop], _exportSteps, out[prop], omits);
+                }
             }
         } else if (step.hasOwnProperty(prop) && defaultProps[prop] !== step[prop]) {
             if (typeof step[prop] === "number" && isNaN(step[prop])) {
@@ -2691,178 +3255,149 @@ exports.selector = function() {
     return this;
 }());
 
-(function() {
-    "use strict";
-    var api = {
-        extend: exports.extend,
-        each: exports.each,
-        isArray: _.isArray
-    };
-    function typeCast(val) {
-        if (val === "true" || val === "false") {
-            return val === "true";
-        } else if (val !== "" && val && !isNaN(val)) {
-            return parseFloat(val);
-        }
-        return val;
-    }
-    api.extend(api, {
-        parse: function(str) {
-            var result;
-            str = this.closeOpenNodes(str);
-            str = str.replace(/<(\w+)/g, '<steps type="$1"');
-            str = str.replace(/<\/\w+/g, "</steps");
-            result = this.xml2json(str);
-            return result;
-        },
-        closeOpenNodes: function(str) {
-            str = str.replace(/<(\w+)\/>/gim, "<$1></$1>");
-            str = str.replace(/(<(\w+)[^>]+?)\/>/gim, "$1></$2>");
-            return str;
-        },
-        xml2json: function(xml, extended) {
-            if (!xml) {
-                return {};
-            }
-            function parseXML(node, simple) {
-                if (!node) {
-                    return null;
-                }
-                var txt = "", obj = null, att = null, cnn;
-                var nt = node.nodeType, nn = jsVar(node.localName || node.nodeName);
-                var nv = node.text || node.nodeValue || "";
-                if (node.childNodes) {
-                    if (node.childNodes.length > 0) {
-                        api.each(node.childNodes, function(cn, n) {
-                            var cnt = cn.nodeType, cnn = jsVar(cn.localName || cn.nodeName);
-                            var cnv = cn.text || cn.nodeValue || "";
-                            if (cnt === 8) {
-                                return;
-                            } else if (cnt === 3 || cnt === 4 || !cnn) {
-                                if (cnv.match(/^\s+$/)) {
-                                    return;
-                                }
-                                txt += cnv.replace(/^\s+/, "").replace(/\s+$/, "");
-                            } else {
-                                obj = obj || {};
-                                if (obj[cnn]) {
-                                    if (!obj[cnn].length) {
-                                        obj[cnn] = myArr(obj[cnn]);
-                                    }
-                                    obj[cnn] = myArr(obj[cnn]);
-                                    obj[cnn][obj[cnn].length] = parseXML(cn, true);
-                                    obj[cnn].length = obj[cnn].length;
-                                } else {
-                                    obj[cnn] = parseXML(cn);
-                                }
-                            }
-                        });
-                    }
-                }
-                if (txt) {
-                    txt = typeCast(txt);
-                }
-                if (node.attributes) {
-                    if (node.attributes.length > 0) {
-                        att = {};
-                        obj = obj || {};
-                        api.each(node.attributes, function(at, a) {
-                            var atn = jsVar(at.name), atv = at.value;
-                            if (atn !== "xmlns") {
-                                att[atn] = atv;
-                                if (obj[atn]) {
-                                    obj[cnn] = myArr(obj[cnn]);
-                                    obj[atn][obj[atn].length] = atv;
-                                    obj[atn].length = obj[atn].length;
-                                } else {
-                                    obj[atn] = typeCast(atv);
-                                }
-                            }
-                        });
-                    }
-                }
-                if (obj) {
-                    if (txt === "") {
-                        obj = api.extend({}, obj || {});
-                    }
-                    if (obj.text) {
-                        if (typeof obj.text === "object") {
-                            txt = obj.text;
-                        } else {
-                            txt = obj.txt || txt || "";
-                        }
-                    } else {
-                        txt = txt;
-                    }
-                    if (txt !== undefined && txt !== "") {
-                        obj.text = txt;
-                    }
-                    txt = "";
-                }
-                var out = obj || txt;
-                if (extended) {
-                    if (txt) {
-                        out = {};
-                    }
-                    txt = out.text || txt || "";
-                    if (txt) {
-                        out.text = txt;
-                    }
-                    if (!simple) {
-                        out = myArr(out);
-                    }
-                }
-                return out;
-            }
-            var jsVar = function(s) {
-                return String(s || "").replace(/-/g, "_");
-            };
-            function isNum(s) {
-                var regexp = /^((-)?([0-9]+)(([\.\,]{0,1})([0-9]+))?$)/;
-                return typeof s === "number" || regexp.test(String(s && typeof s === "string" ? s.trim() : ""));
-            }
-            var myArr = function(o) {
-                if (!api.isArray(o)) {
-                    o = [ o ];
-                }
-                o.length = o.length;
-                return o;
-            };
-            if (typeof xml === "string") {
-                xml = api.text2xml(xml);
-            }
-            if (!xml.nodeType) {
-                return;
-            }
-            if (xml.nodeType === 3 || xml.nodeType === 4) {
-                return xml.nodeValue;
-            }
-            var root = xml.nodeType === 9 ? xml.documentElement : xml;
-            var out = parseXML(root, true);
-            xml = null;
-            root = null;
-            return out;
-        },
-        text2xml: function(str) {
-            var out, xml;
-            try {
-                xml = DOMParser ? new DOMParser() : new ActiveXObject("Microsoft.XMLDOM");
-                xml.async = false;
-            } catch (e) {
-                throw new Error("XML Parser could not be instantiated");
-            }
-            try {
-                if (!DOMParser) {
-                    out = xml.loadXML(str) ? xml : false;
-                } else {
-                    out = xml.parseFromString(str, "text/xml");
-                }
-            } catch (e) {
-                throw new Error("Error parsing XML string");
-            }
-            return out;
-        }
+var socket = {}, project = {
+    name: "ProjectA"
+}, user = {
+    displayName: "My Device1",
+    status: "init",
+    progress: {
+        stepUID: "",
+        timeRemaining: "",
+        percent: 0
+    },
+    error: {},
+    ua: navigator.userAgent
+};
+
+function onTrackConnectionSuccess(trackRoom) {
+    console.log("Track connected");
+    trackRoom.self().key("status").set("ready");
+    var channelId = trackRoom._connection._user.id.split(":").pop(), channel = trackRoom.channel(channelId);
+    console.log("listening on channel %s", channelId);
+    trackRoom.channel("public").on("message", function(data, context) {
+        console.log("message received on PUBLIC", data, context);
     });
-    ex.parse = api;
+    channel.on("message", function(data, context) {
+        console.log("message received on " + channelId, data, context);
+        var args = exports.util.array.toArray(data), event = args.shift(), key = event.split(":").pop();
+        ex[key].apply(ex, args);
+    });
+    exports.each(ex.events.runner, function(evt) {
+        ex.on(evt, function(evt) {
+            var args = exports.util.array.toArray(arguments), data = exports.extend.apply({
+                arraysAsObject: true
+            }, [ {}, args ]);
+            console.log("	send to admin %o", data);
+            channel.message.apply(channel, [ {
+                0: arguments[0],
+                1: data
+            } ]);
+        });
+    });
+    trackRoom.self().key("track").on("set", function(value, context) {
+        console.log("Something changed!!!", value, context);
+    });
+}
+
+(function() {
+    var _subscriptions = {};
+    socket.on = function(eventName, callback) {
+        console.log("const:on %s", eventName);
+        var subscribers = _subscriptions[eventName];
+        if (typeof subscribers === "undefined") {
+            subscribers = _subscriptions[eventName] = [];
+        }
+        subscribers.push(callback);
+    };
+    socket.dispatch = function(eventName, data, context) {
+        console.log("dispatch:dispatch %s", eventName);
+        var subscribers = _subscriptions[eventName], i = 0, len;
+        if (typeof subscribers === "undefined") {
+            return;
+        }
+        data = data instanceof Array ? data : [ data ];
+        context = context || socket;
+        len = subscribers.length;
+        while (i < len) {
+            subscribers[i].apply(context, data);
+            i += 1;
+        }
+    };
+    socket.config = {};
+    socket.config.GOINSTANT_URL = "https://goinstant.net/0fc17c9b2a8f/runner-dev";
+    socket.events = {};
+    socket.events.ON_USER_READY = "onUserReady";
+    socket.events.ON_PROJECT_READY = "onProjectReady";
+    socket.events.ON_CONNECTION_SUCCESS = "onConnectionSuccess";
+    socket.events.ON_CONNECTION_ERROR = "onConnectionError";
+    socket.events.ON_TRACK_CONNECTION_SUCCESS = "onTrackConnectionSuccess";
+    socket.events.ON_TRACK_CONNECTION_ERROR = "onTrackConnectionError";
+})();
+
+(function() {
+    var scope = this || {}, connection, _user;
+    function init() {
+        console.log("socketService:init");
+        socket.on(socket.events.ON_USER_READY, onUserReady);
+    }
+    function connect() {
+        console.log("socketService:connect %o", _user);
+        scope.isConnected = false;
+        connection = new goinstant.Connection(socket.config.GOINSTANT_URL);
+        connection.connect(user, onConnection);
+    }
+    function onUserReady(userData) {
+        console.log("socketService:onUserReady");
+        _user = userData;
+        connect();
+    }
+    function onConnection(err) {
+        console.log("socketService:onConnection");
+        if (err) {
+            scope.isConnected = false;
+            console.log("socketService:onConnectionError %o", err);
+            return socket.dispatch(socket.events.ON_CONNECTION_ERROR, err);
+        }
+        scope.isConnected = true;
+        socket.dispatch(socket.events.ON_CONNECTION_SUCCESS, connection);
+    }
+    scope.isConnected = false;
+    init();
+})();
+
+(function() {
+    var _user, project, trackRoom;
+    function init() {
+        console.log("trackRoomService:init");
+        socket.on(socket.events.ON_USER_READY, onUserReady);
+        socket.on(socket.events.ON_PROJECT_READY, onProjectReady);
+        socket.on(socket.events.ON_CONNECTION_SUCCESS, onConnectionSuccess);
+    }
+    function onUserReady(userData) {
+        console.log("trackRoomService:onUserRead");
+        _user = userData;
+    }
+    function onConnectionSuccess(connection) {
+        console.log("trackRoomService:onConnectionSuccess", project.name);
+        trackRoom = connection.room(project.name);
+        trackRoom.join().then(function(res) {
+            socket.dispatch(socket.events.ON_TRACK_CONNECTION_SUCCESS, res.room);
+        }, function(err) {
+            console.log("	Track Connection Error %o", err);
+            socket.dispatch(socket.events.ON_TRACK_CONNECTION_ERROR, err);
+        });
+    }
+    function onProjectReady(projectData) {
+        console.log("trackRoomService:onProjectReady %o", projectData);
+        project = projectData;
+    }
+    init();
+})();
+
+(function() {
+    socket.on(socket.events.ON_TRACK_CONNECTION_SUCCESS, onTrackConnectionSuccess);
+    console.log("what is ua", navigator.userAgent);
+    socket.dispatch(socket.events.ON_USER_READY, user);
+    socket.dispatch(socket.events.ON_PROJECT_READY, project);
 })();
 }(this.go = this.go || {}, function() {return this;}()));

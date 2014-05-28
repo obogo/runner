@@ -32,6 +32,19 @@
         return val;
     }
 
+    function parseCondition(item, index, list) {
+        if (item.type === 'condition') {
+            item.conditions = [];
+            var i = 0, iLen = item.steps.length;
+            while (i < iLen) {
+                api.each(item.steps, parseCondition);
+                item.conditions.push(item.steps[i]);
+                i += 1;
+            }
+            item.steps = [];// clear old steps.
+        }
+    }
+
     // Add function to jQuery namespace
     api.extend(api, {
         parse: function(str) {
@@ -40,6 +53,9 @@
             str = str.replace(/<(\w+)/g, "<steps type=\"$1\"");
             str = str.replace(/<\/\w+/g, "<\/steps");
             result = this.xml2json(str);
+
+            // we now need to walk the structure looking for conditions and parse them out accordingly.
+            this.each(result.steps, parseCondition);
 
             return result;
         },
@@ -275,5 +291,5 @@
 
     }); // extend $
 
-    ex.parse = api;
+    ex.xml = api;
 }());

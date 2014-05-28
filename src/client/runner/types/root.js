@@ -1,3 +1,8 @@
-register('root', {}, function rootHandler() {
-    return statuses.PASS;
+registerType(types.ROOT = 'root', function () {
+    return {
+        options: {},
+        preExec: function () {
+            return statuses.PASS;
+        }
+    };
 });

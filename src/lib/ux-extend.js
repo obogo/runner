@@ -7,17 +7,23 @@
  */
 function extend(destination, source) {
     var args = exports.util.array.toArray(arguments), i = 1, len = args.length, item, j;
+    var options = this || {};
     while (i < len) {
         item = args[i];
         for (j in item) {
-            if (destination[j] && typeof destination[j] === 'object') {
-                destination[j] = extend(destination[j], item[j]);
-            } else if (item[j] instanceof Array) {
-                destination[j] = extend(destination[j] || [], item[j]);
-            } else if (item[j] && typeof item[j] === 'object') {
-                destination[j] = extend(destination[j] || {}, item[j]);
-            } else {
-                destination[j] = item[j];
+            if (item.hasOwnProperty(j)) {
+                if (destination[j] && typeof destination[j] === 'object') {
+                    destination[j] = extend.apply(options, [destination[j], item[j]]);
+                } else if (item[j] instanceof Array) {
+                    destination[j] = destination[j] || (options && options.arrayAsObject ? {length: item[j].length} : []);
+                    if (item[j].length) {
+                        destination[j] = extend.apply(options, [destination[j], item[j]]);
+                    }
+                } else if (item[j] && typeof item[j] === 'object') {
+                    destination[j] = extend.apply(options, [destination[j] || {}, item[j]]);
+                } else {
+                    destination[j] = item[j];
+                }
             }
         }
         i += 1;

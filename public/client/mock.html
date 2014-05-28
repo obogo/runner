@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test</title>
+    <link rel="stylesheet" href="css/ux-jsonview.css"/>
+    <style type="text/css">
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0px;
+            padding: 0px;
+        }
+
+        .client {
+            position: absolute;
+            left: 0px;
+            top: 0px;
+            width: 300px;
+            bottom: 0px;
+            background-color: #efefef;
+            border: 1px solid #000000;
+            color: #333333;
+            overflow: auto;
+        }
+
+        .admin {
+            position: absolute;
+            top: 0px;
+            left: 300px;
+            right: 0px;
+            bottom: 0px;
+            background-color: #CCCCCC;
+            border: 1px solid #FFFFFF;
+            color: #000000;
+            overflow: auto;
+        }
+
+        .title {
+            text-align: center;
+        }
+
+        .label {
+            display: block;
+            width: 200px;
+            height: 20px;
+            overflow: hidden;
+            font-size: 12px;
+        }
+
+        .bar {
+            display: block;
+            width: 200px;
+            border: 1px solid #000000;
+        }
+
+        .bar .progress {
+            background: #369;
+            height: 16px;
+        }
+
+        .import {
+            position: absolute;
+            left: 0px;
+            bottom: 0px;
+            width: 100%;
+        }
+
+        .importXML {
+            width: 400px;
+        }
+
+        .jsonViewer {
+            position: absolute;
+            top: 30px;
+            right: 0px;
+            width: 300px;
+            height: 400px;
+            overflow: auto;
+            border: 1px solid #000000;
+        }
+
+        .admin .jsonViewer {
+            left: 0px;
+            right: auto;
+        }
+
+        .testbed {
+            position: absolute;
+            top: 500px;
+            left: 0px;
+            right: 0px;
+            bottom: 0px;
+            border: 1px solid #000000;
+            background: #ffffff;
+        }
+    </style>
+    <script src="js/lib/angular.js"></script>
+    <script src="js/go-runner-client-mock.js"></script>
+    <script src="js/lib/ux-jsonview.js"></script>
+    <script>
+        angular.module('client', ['ux']).controller('progress', function ($scope) {
+            var dictionary = {};
+            $scope.items = [];
+            $scope.getIndent = function (step) {
+                return step.uid.split('.').length;
+            };
+            $scope.getColor = function (step) {
+                var percent = step.time / step.expectedTime;
+                if (percent < 1) {
+                    return '#009900';
+                } else if (percent < 1.25) {
+                    return '#33CC00';
+                } else if (percent < 1.5) {
+                    return '#FFFF00';
+                } else if (percent < 2) {
+                    return '#FF9900';
+                } else if (percent < step.maxTime) {
+                    return '#FF6600';
+                } else {
+                    return '#FF0000';
+                }
+            };
+
+            go.each(go.runner.events.runner, function (eventName) {
+                go.runner.on(eventName, function (event) {
+                    $scope.data = go.runner.getRoot();
+                });
+            });
+
+            $scope.data = go.runner.getRoot();
+        });
+    </script>
+    <script src="../admin/js/go-runner-admin-mock.js"></script>
+    <script>
+        angular.element(document).ready(function () {
+            angular.bootstrap(document.querySelectorAll('.client')[0], ['client']);
+            angular.bootstrap(document.querySelectorAll('.admin')[0], ['admin']);
+        });
+    </script>
+</head>
+<body>
+<!--// CLIENT //-->
+<div class="client">
+    <div class="title">Client</div>
+    <div data-ng-controller="progress">
+        <div class="testbed">
+            <h3>Testbed App</h3>
+            <ul>
+                <li><a href="#/link1">Link 1</a></li>
+                <li><a href="#/link2">Link 2</a></li>
+                <li><a href="#/link3">Link 3</a></li>
+                <li><a href="#/link4">Link 4</a></li>
+                <li><a href="#/link5">Link 5</a></li>
+                <li><a href="#/link6">Link 6</a></li>
+                <li><a href="#/link7">Link 7</a></li>
+            </ul>
+        </div>
+        <div class="jsonViewer">
+            <div ux-jsonview="{showPaths:true}" class="jsonViewer" data-ng-model="data"></div>
+        </div>
+    </div>
+</div>
+<!--// ADMIN -->
+<div class="admin">
+    <div class="title">Admin</div>
+    <div data-ng-controller="myController">
+        <div class="jsonViewer">
+            <div ux-jsonview="{showPaths:true}" data-ng-model="sampleData"></div>
+        </div>
+        <div class="import">
+            <div class="importXML">
+                <label for="startUID">Start UID:</label>
+                <input id="startUID" type="text" data-ng-model="startNode" value="">
+                <a href="" data-ng-click="start(startNode)">Start</a>
+                <a href="" data-ng-click="reset()">Reset</a>
+                <span>time:{{data.timeLeft}}s</span>
+                <br/>
+                <a href="" data-ng-click="setScenarioXML()">Scenario XML</a>
+                <a href="" data-ng-click="setSimpleXML()">Simple XML</a>
+                <a href="" data-ng-click="registerScenario()" style="float:right;margin-right:4px;">Register</a>
+                <a href="" data-ng-click="sendTest()" style="float:right;margin-right:4px;">Set</a>
+                <textarea id="importXML" data-ng-model="xmlData" rows="10" cols="54"></textarea>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

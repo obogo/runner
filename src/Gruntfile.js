@@ -35,8 +35,11 @@ module.exports = function (grunt) {
                     '../public/client/js/<%= pkg.packageName %>-diff.js': [
                         'lib/data/*.js'
                     ],
-                    '../public/client/js/<%= pkg.packageName %>-<%= pkg.filename %>-client.js': [
-                        'package.js',
+                    '../public/client/js/<%= pkg.packageName %>-<%= pkg.filename %>-client-mock.js': [
+                        'client/package.js',
+                        'shared/events.js',
+                        'lib/stacktrace.js',
+                        'lib/ux-count.js',
                         'lib/ux-dispatcher.js',
                         'lib/ux-util-array.js',
                         'lib/ux-each.js',
@@ -45,9 +48,8 @@ module.exports = function (grunt) {
                         'lib/data/Inspector.js',
                         'lib/data/diff.js',
                         'client/runner/log.js',
-                        'client/runner/types.js',
-                        'client/runner/MethodAPI.js',
-                        'client/runner/methods/*.js',
+                        'client/runner/const.js',
+                        'client/runner/invoke.js',
                         'client/runner/Path.js',
                         'client/runner/diffThrottle.js',
                         'client/runner/register.js',
@@ -55,22 +57,75 @@ module.exports = function (grunt) {
                         'client/runner/types/root.js',
                         'client/runner/types/**/*.js',
                         'client/runner/runner.js',
-                        'client/runner/step.js',
+                        'client/runner/import.js',
+                        'client/runner/export.js',
                         'lib/ux-selector.js',
                         'lib/parser/ux-parser.js',
-                        'lib/parser/xml2json.js'
+                        'client/socket/mock/socket.js',
+                        'socket/mock/socket.js'
 //                        'src/recorder.js',
                     ],
-                    '../public/admin/js/<%= pkg.packageName %>-<%= pkg.filename %>-admin.js': [
-                        'package.js',
+                    '../public/client/js/<%= pkg.packageName %>-<%= pkg.filename %>-client.js': [
+                        'client/package.js',
+                        'shared/events.js',
+                        'lib/stacktrace.js',
+                        'lib/ux-count.js',
+                        'lib/ux-dispatcher.js',
+                        'lib/ux-util-array.js',
+                        'lib/ux-each.js',
+                        'lib/ux-extend.js',
                         'lib/data/_.js',
-                        'admin/admin.js'
+                        'lib/data/Inspector.js',
+                        'lib/data/diff.js',
+                        'client/runner/log.js',
+                        'client/runner/const.js',
+                        'client/runner/invoke.js',
+                        'client/runner/Path.js',
+                        'client/runner/diffThrottle.js',
+                        'client/runner/register.js',
+                        'client/runner/types/step.js',
+                        'client/runner/types/root.js',
+                        'client/runner/types/**/*.js',
+                        'client/runner/runner.js',
+                        'client/runner/import.js',
+                        'client/runner/export.js',
+                        'lib/ux-selector.js',
+                        'lib/parser/ux-parser.js',
+                        'client/socket/goinstant/socket.js'
+//                        'src/recorder.js',
+                    ],
+                    '../public/admin/js/<%= pkg.packageName %>-<%= pkg.filename %>-admin-mock.js': [
+                        'admin/package.js',
+                        'admin/const.js',
+                        'shared/events.js',
+                        'lib/data/_.js',
+                        'lib/ux-extend.js',
+                        'lib/ux-each.js',
+                        'lib/ux-dispatcher.js',
+                        'lib/ux-util-array.js',
+                        'admin/admin.js',
+                        'lib/parser/xml2json.js',
+                        'admin/socket/mock/socket.js',
+                        'socket/mock/socket.js'
+                    ],
+                    '../public/admin/js/<%= pkg.packageName %>-<%= pkg.filename %>-admin.js': [
+                        'admin/package.js',
+                        'admin/const.js',
+                        'shared/events.js',
+                        'lib/ux-extend.js',
+                        'lib/ux-each.js',
+                        'lib/ux-util-array.js',
+                        'lib/data/_.js',
+                        'lib/ux-extend.js',
+                        'admin/admin.js',
+                        'lib/parser/xml2json.js',
+                        'admin/socket/goinstant/socket.js'
                     ]
                 }
             },
             build_min: {
                 options: {
-                    report: 'gzip',
+                    report: 'min',
                     banner: '<%= banner %>'
                 },
                 files: {
@@ -85,7 +140,7 @@ module.exports = function (grunt) {
         },
         watch: {
             scripts: {
-                files: ['admin/**/*.js', 'client/**/*.js', 'lib/**/*.js'],
+                files: ['admin/**/*.js', 'client/**/*.js', 'lib/**/*.js', 'shared/**/*.js', 'GruntFile.js'],
                 tasks: ['jshint', 'uglify'],
                 options: {
                     spawn: false,

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<scenario name="scn">
+    <set property="a">10</set>
+    <set property="b">10</set>
+    <condition>
+        <if expression="a == b">
+            <set property="c">20</set>
+            <condition>
+                <if expression="c > a">
+                    <set property="a">2</set>
+                </if>
+            </condition>
+        </if>
+    </condition>
+</scenario>
