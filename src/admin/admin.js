@@ -23,6 +23,7 @@ function getXML_file(xml_file) {
 //test controller
 myApp.controller('myController', function ($scope) {
     $scope.sampleData = {events: [], root: {}};
+    var xmlParser = new X2JS();
     go.each(ex.events.runner, function (eventName) {
         $scope.$on(eventName, function () {
             var args = go.util.array.toArray(arguments);
@@ -36,6 +37,28 @@ myApp.controller('myController', function ($scope) {
             $scope.sampleData.events.push(args);
         });
     });
+
+    function parse(str) {
+        var result;
+        str = closeOpenNodes(str);
+        str = str.replace(/<(\w+)/g, "<steps type=\"$1\"");
+        str = str.replace(/<\/\w+/g, "<\/steps");
+        result = xmlParser.xml_str2json(str);// this.xml2json(str);
+
+        // we now need to walk the structure looking for conditions and parse them out accordingly.
+        this.each(result.steps, parseCondition);
+
+        return result;
+    }
+
+    // this will convert closed tags to open tags
+    // <reset/> => <reset></reset>
+    function closeOpenNodes(str) {
+        str = str.replace(/<(\w+)\/>/gim, "<$1><\/$1>");
+        // <reset ... /> => <reset ...></reset>
+        str = str.replace(/(<(\w+)[^>]+?)\/>/gim, "$1><\/$2>");
+        return str;
+    }
 
     $scope.parseXML = function () {
         //TODO: Cannot have reference to runner.

@@ -18,7 +18,7 @@ module.exports = function (grunt) {
                 globals: {
 //                    loopfunc: function (name) {} // uglify may have one too.
                 },
-                ignores: ['lib/parser/ux-parser.js']
+                ignores: ['lib/parser/ux-parser.js', 'lib/parser/xml2json.js']
             }
         },
         uglify: {
