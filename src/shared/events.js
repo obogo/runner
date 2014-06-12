@@ -1,4 +1,5 @@
-ex.events = {
+ex.events = ex.events || {};
+exports.extend(ex.events, {
     admin: {
         START: "runner:start",
         STOP: "runner:stop",
@@ -21,4 +22,4 @@ ex.events = {
         ON_LOAD_TEST: "runner:onLoadTest",
         ON_REGISTER_SCENARIO: "runner:onRegisterScenario"
     }
-};
+});

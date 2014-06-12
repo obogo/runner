@@ -156,9 +156,9 @@ exports.selector = (function () {
     }
 
     function getClasses(element, ignoreClass) {
-        var classes = ux.filter(element.classList, filterNumbers);
-        classes = ux.filter(classes, classFiltersFctn);
-        return ux.filter(classes, ignoreClass);
+        var classes = exports.filter(element.classList, filterNumbers);
+        classes = exports.filter(classes, classFiltersFctn);
+        return exports.filter(classes, ignoreClass);
     }
 
     function getAttributes(element, child) {

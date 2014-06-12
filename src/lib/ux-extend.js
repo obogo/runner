@@ -20,6 +20,11 @@ function extend(destination, source) {
                         destination[j] = extend.apply(options, [destination[j], item[j]]);
                     }
                 } else if (item[j] && typeof item[j] === 'object') {
+                    if (options.objectsAsArray && typeof item[j].length === "number") {
+                        if (!(destination[j] instanceof Array)) {
+                            destination[j] = [];
+                        }
+                    }
                     destination[j] = extend.apply(options, [destination[j] || {}, item[j]]);
                 } else {
                     destination[j] = item[j];

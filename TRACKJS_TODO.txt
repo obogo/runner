@@ -1,0 +1,100 @@
+Trapjs.com (+)
+capturejs.com (+)
+metricsjs.com
+
+Pros:
+    Trackjs is just starting
+    Trackjs is expensive per month.
+Cons:
+    Small pool of users.
+
+Steps start to finish
+    Steps have timestamp.
+Error with stack trace.
+Record other Javascript libraries in the page. (parse script tags and get versions)
+Give other information about OS, time on page, etc. Analytics
+Categorizing errors based on OS and browser.
+Filter those
+Nice tutorials to start.
+    - Keep around errors for 30 days
+    - Keep stats for 30 days
+    - keep other data for 24 hrs.
+    - send push notifications on errors. (configure by production, staging, etc)
+        - types
+            - email
+            - push bullet (instant)
+            - (Phase 2) in USA/Canada. Text message.
+        - first time error happens
+        - then after 100 of the same error happens (they choose the number - have some preset suggestions)
+Pricing:
+    based off of unique visitors. (x about of unique visitors per month)
+        - 100 monthly unique visitors (free) (should be plenty for testing)
+        - 5000 monthly unique visitors ($9)
+        - 100,000 monthly unique visitors ($29)
+        - 1,000,000 monthly unique visitors ($99)
+        - 10,000,000 monthly unique visitors ($499)
+        - 100,000,000 monthly unique visitors ($1999)
+        - 1,000,000,000 monthly unique visitors ($9999) (Google hit 1 billion per month in 2013)
+
+
+ADMIN:
+    different js configurations.
+        (allow them to add x, may cost more for more than 1)
+        free account gets one configuration.
+            dev.obogo.com/abcefuser.js (server based on domain pulls correct js)
+
+            if locally you want to pull a specific one then you can hit a direct one.
+                dev.obogo.com/abcdfuser-production.js
+        need to be able to select a version for each configuration that they create.
+            - it can be auto update, or manual update.
+
+NOTE:
+    Make sure errors report missing files. (any 404)
+
+RIPOFF Track JS Notes
+    - Need to track when offline. Save in localStorage. Send when connected.
+        - transitioning to offline apps.
+    - stack trace is going to correctly parse the stack trace.
+        - (!Improvement) Stack trace needs to have raw and parsed. (in case parsed makes a mistake or raw is more readable)
+        - (!Improvement) Click to load the js file. (won't work in local host)
+            - highlight their code and show the code at that line in a scrollable div.
+    - Timeline (Different)
+        - show more compact view, and non compact view.
+            - one called terminal other called timeline.
+            - color code the terminal lines. Timeline to match same colors for icons.
+    - Dashboard (!Improvement)
+        - Pie Chart Domains producing the most errors.
+        - Pie Chart listing which browser giving the most errors.
+        - Pie Chart Which device is giving the most errors.
+        - Line graph showing line graph for spikes in error reporting.
+        - Track Hits
+            - Report errors per hit rate. Line Graph showing hit line vs error line.
+    - Warnings
+        - Warn if there is a newer version of a library that is out than the one they are using.
+    //TODO: Get these recording.
+    - Error Reporting
+        *- global error (stack trace may be wrong)
+        *- try catch (stack trace should be accurate)
+        *- network (ajax) (we need to send ours through ssl) We may not want to track sensitive info. Need configured from admin.
+        *- console error (overwrite console)
+        *- track offline and online statuses.
+            (use our heartbeat to tell).
+            Don't tell offline unless our heartbeat fails.
+            - localStorage needs shelf life if offline. (configurable by admin)
+            - need to fire a browser event when offline or online changes so devs can use in their projects.
+            - has public variable to tell online/offline.
+            - need enable or disable in admin for heartbeat, also configure heartbeat intervals.
+        - direct (blabla.track)
+
+    - Make API that will automatically pick up try catch from track js if we are included.
+        - compatible with trackJS API.
+
+Nice To Haves:
+    Client side counter that shows errors picked up by trackjs or make sure error still shows in console.
+    Try catch keeps me from getting them in the browser. This needs to be configurable for dev vs production.
+
+    html2canvas screen capture once for each unique error per device / browser to give context.
+        - limit max size to save space... maybe leave full size.
+        - deleting error will delete screen shots with it.
+   REAL TIME CONSOLE LOGS.
+        - upgraded package. Real time admin errors poured in. realtime console monitoring.

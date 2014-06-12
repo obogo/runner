@@ -1,3 +1,6 @@
+HEATMAP:
+    http://www.crazyegg.com/#.
+
 BUSINESS PLAN
 http://www.9kdesigns.com/resources/starting-an-online-business-essential-tools
 
@@ -15,6 +18,11 @@ Marketing Model
     http://trackjs.com/blog/better-way-track-javascript-errors/ - a cool design.
     keep results for last 1 for free and larger number of results of tests for paid accounts. They always get the result real time, but it is only saved if they paying up to X amount.
         - always store at least the last result to prevent some tests from needing to re-run needlessly.
+
+RECORDING AJAX: WHOOT!!!!!
+http://stackoverflow.com/questions/3596583/javascript-detect-an-ajax-event
+    - you can override the ajax request so that you capture everything going in an out.
+    - this will allow you to substitute in your own cached responses.
 
 TODO:
 * NEED to have our ui run in a frame.
@@ -94,11 +102,15 @@ TODO:
 
     Make timestamps only do performance. Make so increments actually determine complete fail and the amount of steps.
 
+Make sure that runner works in a phoneGap application. (Now we have e2e on a native app).
+
 MARKDOWN HTML RENDER:
 http://dynalon.github.io/mdwiki/#!index.md
 
 COMPETITORS:
     http://speedcurve.com/ - page load speeds. uses Google Page Speed (https://developers.google.com/speed/pagespeed/). (Nice colors)
+    http://www.cloudmonkeymobile.com/monkeytalk - test automation tool on all platforms, native, and browser.
+    http://www.telerik.com/mobile-testing (Serious Competitor)
 
 
 STRUCTURE:

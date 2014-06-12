@@ -7,31 +7,6 @@
 "use strict";
 var ex = exports.runner = exports.runner || {};
 
-ex.events = {
-    admin: {
-        START: "runner:start",
-        STOP: "runner:stop",
-        UPDATE: "runner:update",
-        RESET: "runner:reset",
-        DONE: "runner:done",
-        START_RECORDING: "runner:startRecording",
-        STOP_RECORDING: "runner:stopRecording",
-        LOAD_TEST: "runner:loadTest",
-        REGISTER_SCENARIO: "runner:registerScenario"
-    },
-    runner: {
-        ON_START: "runner:onStart",
-        ON_STOP: "runner:onStop",
-        ON_UPDATE: "runner:onUpdate",
-        ON_RESET: "runner:onReset",
-        ON_DONE: "runner:onDone",
-        ON_START_RECORDING: "runner:onStartRecording",
-        ON_STOP_RECORDING: "runner:onStopRecording",
-        ON_LOAD_TEST: "runner:onLoadTest",
-        ON_REGISTER_SCENARIO: "runner:onRegisterScenario"
-    }
-};
-
 (function(global, factory) {
     global.printStackTrace = factory();
 })(this || exports, function() {
@@ -362,6 +337,16 @@ function dispatcher(target, scope, map) {
             off(event, callback);
         };
     }
+    function onOnce(event, callback) {
+        function fn() {
+            off(event, fn);
+            callback.apply(scope || target, arguments);
+        }
+        return on(event, fn);
+    }
+    function getListeners(event) {
+        return listeners[event];
+    }
     function fire(callback, args) {
         return callback && callback.apply(target, args);
     }
@@ -377,13 +362,18 @@ function dispatcher(target, scope, map) {
     if (scope && map) {
         target.on = scope[map.on] && scope[map.on].bind(scope);
         target.off = scope[map.off] && scope[map.off].bind(scope);
+        target.onOnce = scope[map.onOnce] && scope[map.onOnce].bind(scope);
         target.dispatch = scope[map.dispatch].bind(scope);
     } else {
         target.on = on;
         target.off = off;
+        target.onOnce = onOnce;
         target.dispatch = dispatch;
     }
+    target.getListeners = getListeners;
 }
+
+exports.dispatcher = dispatcher;
 
 function toArray(obj) {
     var result = [], i = 0, len = obj.length;
@@ -478,6 +468,11 @@ function extend(destination, source) {
                         destination[j] = extend.apply(options, [ destination[j], item[j] ]);
                     }
                 } else if (item[j] && typeof item[j] === "object") {
+                    if (options.objectsAsArray && typeof item[j].length === "number") {
+                        if (!(destination[j] instanceof Array)) {
+                            destination[j] = [];
+                        }
+                    }
                     destination[j] = extend.apply(options, [ destination[j] || {}, item[j] ]);
                 } else {
                     destination[j] = item[j];
@@ -780,6 +775,33 @@ exports.data.diff = function(source, compare) {
     return ret;
 };
 
+ex.events = ex.events || {};
+
+exports.extend(ex.events, {
+    admin: {
+        START: "runner:start",
+        STOP: "runner:stop",
+        UPDATE: "runner:update",
+        RESET: "runner:reset",
+        DONE: "runner:done",
+        START_RECORDING: "runner:startRecording",
+        STOP_RECORDING: "runner:stopRecording",
+        LOAD_TEST: "runner:loadTest",
+        REGISTER_SCENARIO: "runner:registerScenario"
+    },
+    runner: {
+        ON_START: "runner:onStart",
+        ON_STOP: "runner:onStop",
+        ON_UPDATE: "runner:onUpdate",
+        ON_RESET: "runner:onReset",
+        ON_DONE: "runner:onDone",
+        ON_START_RECORDING: "runner:onStartRecording",
+        ON_STOP_RECORDING: "runner:onStopRecording",
+        ON_LOAD_TEST: "runner:onLoadTest",
+        ON_REGISTER_SCENARIO: "runner:onRegisterScenario"
+    }
+});
+
 function Logger(name, style) {
     this.name = name;
     this.style = style;
@@ -795,7 +817,7 @@ Logger.prototype.log = function log(step) {
     }
     this.applyName(args);
     this.applyStyle(args);
-    console.log.apply(console, args);
+    this.output.apply(console, args);
 };
 
 Logger.prototype.applyName = function(args) {
@@ -807,7 +829,9 @@ Logger.prototype.applyName = function(args) {
                 index += 1;
             }
             if (index) {
-                str = str.substr(0, index) + this.name + str.substr(index + 1);
+                str = str.substr(0, index) + this.name + "::" + str.substr(index);
+                args[0] = str;
+                return;
             }
         }
         str = this.name + "::" + str;
@@ -822,7 +846,19 @@ Logger.prototype.applyStyle = function(args) {
     }
 };
 
+Logger.prototype.output = window.console && window.console.log;
+
 var csl = new Logger();
+
+function uidToPath(uid) {
+    var path = uid.split("."), i = 0, len = path.length - 1;
+    path.shift();
+    while (i < len) {
+        path[i] = parseInt(path[i], 10);
+        i += 1;
+    }
+    return path;
+}
 
 var types = {}, statuses = {
     UNRESOLVED: "unresolved",
@@ -963,17 +999,8 @@ function Path() {
             next();
         }
     }
-    function uidToPath(step) {
-        var path = step.uid.split("."), i = 0, len = path.length - 1;
-        path.shift();
-        while (i < len) {
-            path[i] = parseInt(path[i], 10);
-            i += 1;
-        }
-        return path;
-    }
     function select(step) {
-        var parent, path = uidToPath(step), i = 0, len = path.length;
+        var parent, path = uidToPath(step.uid), i = 0, len = path.length;
         parent = getStepFromPath(path, 0, root, -1);
         if (parent) {
             parent.childIndex = path[len - 1] || 0;
@@ -1033,7 +1060,7 @@ function Path() {
         return null;
     }
     function getParentFrom(step) {
-        var path = uidToPath(step);
+        var path = uidToPath(step.uid);
         return path.length ? getStepFromPath(path, 0, root, -1) : root;
     }
     function getAllProgress() {
@@ -2020,9 +2047,9 @@ exports.selector = function() {
         };
     }
     function getClasses(element, ignoreClass) {
-        var classes = ux.filter(element.classList, filterNumbers);
-        classes = ux.filter(classes, classFiltersFctn);
-        return ux.filter(classes, ignoreClass);
+        var classes = exports.filter(element.classList, filterNumbers);
+        classes = exports.filter(classes, classFiltersFctn);
+        return exports.filter(classes, ignoreClass);
     }
     function getAttributes(element, child) {
         var i = 0, len = element.attributes ? element.attributes.length : 0, attr, attributes = [], uniqueAttr = getUniqueAttribute(element.attributes);

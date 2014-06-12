@@ -50,18 +50,8 @@ function Path() {
         }
     }
 
-    function uidToPath(step) {
-        var path = step.uid.split('.'), i = 0, len = path.length - 1;
-        path.shift();
-        while (i < len) {
-            path[i] = parseInt(path[i], 10);
-            i += 1;
-        }
-        return path;
-    }
-
     function select(step) {
-        var parent, path = uidToPath(step), i = 0, len = path.length;
+        var parent, path = uidToPath(step.uid), i = 0, len = path.length;
         parent = getStepFromPath(path, 0, root, -1);
         if (parent) {
             parent.childIndex = path[len - 1] || 0;
@@ -129,7 +119,7 @@ function Path() {
     }
 
     function getParentFrom(step) {
-        var path = uidToPath(step);
+        var path = uidToPath(step.uid);
         return path.length ? getStepFromPath(path, 0, root, -1) : root;
     }
 

@@ -1,0 +1,9 @@
+record in and out ajax.
+save them to our server.
+- admin to allow them to change statuses
+- they can also create urls as well by hand.
+    - need to keep a list of each one and the response. not the params sent, but the response to each # of that call. call 2 gets response 2.
+
+
+Could have prebuilt mocks like interfacing with twitter and so on.
+- these would be free because they are not custom data.

@@ -12,7 +12,7 @@ Logger.prototype.log = function log(step) {
         }
         this.applyName(args);
         this.applyStyle(args);
-        console.log.apply(console, args);
+        this.output.apply(console, args);
     };
 Logger.prototype.applyName = function (args) {
     var str = args[0];
@@ -23,7 +23,9 @@ Logger.prototype.applyName = function (args) {
                 index += 1;
             }
             if (index) {
-                str = str.substr(0, index) + this.name + str.substr(index + 1);
+                str = str.substr(0, index) + this.name + '::' + str.substr(index);
+                args[0] = str;
+                return;
             }
         }
         str = this.name + '::' + str;
@@ -36,5 +38,6 @@ Logger.prototype.applyStyle = function (args) {
         args.splice(1, 0, this.style);
     }
 };
+Logger.prototype.output = window.console && window.console.log;
 
 var csl = new Logger();

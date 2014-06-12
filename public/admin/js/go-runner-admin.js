@@ -9,31 +9,6 @@ var ex = exports.runnerAdmin = exports.runnerAdmin || {};
 
 var win = window, doc = win.document;
 
-ex.events = {
-    admin: {
-        START: "runner:start",
-        STOP: "runner:stop",
-        UPDATE: "runner:update",
-        RESET: "runner:reset",
-        DONE: "runner:done",
-        START_RECORDING: "runner:startRecording",
-        STOP_RECORDING: "runner:stopRecording",
-        LOAD_TEST: "runner:loadTest",
-        REGISTER_SCENARIO: "runner:registerScenario"
-    },
-    runner: {
-        ON_START: "runner:onStart",
-        ON_STOP: "runner:onStop",
-        ON_UPDATE: "runner:onUpdate",
-        ON_RESET: "runner:onReset",
-        ON_DONE: "runner:onDone",
-        ON_START_RECORDING: "runner:onStartRecording",
-        ON_STOP_RECORDING: "runner:onStopRecording",
-        ON_LOAD_TEST: "runner:onLoadTest",
-        ON_REGISTER_SCENARIO: "runner:onRegisterScenario"
-    }
-};
-
 function extend(destination, source) {
     var args = exports.util.array.toArray(arguments), i = 1, len = args.length, item, j;
     var options = this || {};
@@ -51,6 +26,11 @@ function extend(destination, source) {
                         destination[j] = extend.apply(options, [ destination[j], item[j] ]);
                     }
                 } else if (item[j] && typeof item[j] === "object") {
+                    if (options.objectsAsArray && typeof item[j].length === "number") {
+                        if (!(destination[j] instanceof Array)) {
+                            destination[j] = [];
+                        }
+                    }
                     destination[j] = extend.apply(options, [ destination[j] || {}, item[j] ]);
                 } else {
                     destination[j] = item[j];
@@ -163,7 +143,7 @@ Logger.prototype.log = function log(step) {
     }
     this.applyName(args);
     this.applyStyle(args);
-    console.log.apply(console, args);
+    this.output.apply(console, args);
 };
 
 Logger.prototype.applyName = function(args) {
@@ -175,7 +155,9 @@ Logger.prototype.applyName = function(args) {
                 index += 1;
             }
             if (index) {
-                str = str.substr(0, index) + this.name + str.substr(index + 1);
+                str = str.substr(0, index) + this.name + "::" + str.substr(index);
+                args[0] = str;
+                return;
             }
         }
         str = this.name + "::" + str;
@@ -189,6 +171,8 @@ Logger.prototype.applyStyle = function(args) {
         args.splice(1, 0, this.style);
     }
 };
+
+Logger.prototype.output = window.console && window.console.log;
 
 var csl = new Logger();
 
@@ -391,6 +375,33 @@ var _;
         };
     }
 })();
+
+ex.events = ex.events || {};
+
+exports.extend(ex.events, {
+    admin: {
+        START: "runner:start",
+        STOP: "runner:stop",
+        UPDATE: "runner:update",
+        RESET: "runner:reset",
+        DONE: "runner:done",
+        START_RECORDING: "runner:startRecording",
+        STOP_RECORDING: "runner:stopRecording",
+        LOAD_TEST: "runner:loadTest",
+        REGISTER_SCENARIO: "runner:registerScenario"
+    },
+    runner: {
+        ON_START: "runner:onStart",
+        ON_STOP: "runner:onStop",
+        ON_UPDATE: "runner:onUpdate",
+        ON_RESET: "runner:onReset",
+        ON_DONE: "runner:onDone",
+        ON_START_RECORDING: "runner:onStartRecording",
+        ON_STOP_RECORDING: "runner:onStopRecording",
+        ON_LOAD_TEST: "runner:onLoadTest",
+        ON_REGISTER_SCENARIO: "runner:onRegisterScenario"
+    }
+});
 
 var rootScope, myApp = angular.module("admin", [ "ux" ]).run([ "$rootScope", function($rootScope) {
     rootScope = $rootScope;

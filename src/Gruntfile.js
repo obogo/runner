@@ -18,7 +18,7 @@ module.exports = function (grunt) {
                 globals: {
 //                    loopfunc: function (name) {} // uglify may have one too.
                 },
-                ignores: ['lib/parser/ux-parser.js', 'lib/parser/xml2json.js']
+                ignores: ['lib/parser/ux-parser.js', 'lib/parser/xml2json.js', 'lib/paperjs/*.js']
             }
         },
         uglify: {
@@ -37,7 +37,6 @@ module.exports = function (grunt) {
                     ],
                     '../public/client/js/<%= pkg.packageName %>-<%= pkg.filename %>-client-mock.js': [
                         'client/package.js',
-                        'shared/events.js',
                         'lib/stacktrace.js',
                         'lib/ux-count.js',
                         'lib/ux-dispatcher.js',
@@ -48,7 +47,9 @@ module.exports = function (grunt) {
                         'lib/data/_.js',
                         'lib/data/Inspector.js',
                         'lib/data/diff.js',
+                        'shared/events.js',
                         'shared/log.js',
+                        'shared/uidToPath.js',
                         'client/runner/const.js',
                         'client/runner/invoke.js',
                         'client/runner/Path.js',
@@ -68,7 +69,6 @@ module.exports = function (grunt) {
                     ],
                     '../public/client/js/<%= pkg.packageName %>-<%= pkg.filename %>-client.js': [
                         'client/package.js',
-                        'shared/events.js',
                         'lib/stacktrace.js',
                         'lib/ux-count.js',
                         'lib/ux-dispatcher.js',
@@ -79,7 +79,9 @@ module.exports = function (grunt) {
                         'lib/data/_.js',
                         'lib/data/Inspector.js',
                         'lib/data/diff.js',
+                        'shared/events.js',
                         'shared/log.js',
+                        'shared/uidToPath.js',
                         'client/runner/const.js',
                         'client/runner/invoke.js',
                         'client/runner/Path.js',
@@ -103,12 +105,12 @@ module.exports = function (grunt) {
                     '../public/admin/js/<%= pkg.packageName %>-<%= pkg.filename %>-admin-mock.js': [
                         'admin/package.js',
                         'admin/const.js',
-                        'shared/events.js',
                         'lib/data/_.js',
                         'lib/ux-extend.js',
                         'lib/ux-each.js',
                         'lib/ux-dispatcher.js',
                         'lib/ux-util-array.js',
+                        'shared/events.js',
                         'admin/admin.js',
                         'lib/parser/xml2json.js',
                         'admin/socket/mock/socket.js',
@@ -117,7 +119,6 @@ module.exports = function (grunt) {
                     '../public/admin/js/<%= pkg.packageName %>-<%= pkg.filename %>-admin.js': [
                         'admin/package.js',
                         'admin/const.js',
-                        'shared/events.js',
                         'lib/ux-extend.js',
                         'lib/ux-each.js',
                         'lib/ux-util-array.js',
@@ -125,6 +126,7 @@ module.exports = function (grunt) {
                         'shared/log.js',
                         'lib/data/_.js',
                         'lib/ux-extend.js',
+                        'shared/events.js',
                         'admin/admin.js',
                         'lib/parser/xml2json.js',
                         'admin/socket/goinstant/adminSocketConst.js',
@@ -132,6 +134,52 @@ module.exports = function (grunt) {
                         'admin/socket/goinstant/adminSocketService.js',
                         'admin/socket/goinstant/adminTrackRoomService.js',
                         'admin/socket/goinstant/adminTrackRoomListeners.js'
+                    ],
+                    '../public/client/js/<%= pkg.packageName %>-<%= pkg.filename %>-recorder.js': [
+                        'client/package.js',
+                        'client/recorder/const.js',
+                        'lib/ux-charPack.js',
+                        'lib/ux-dispatcher.js',
+                        'lib/ux-util-array.js',
+                        'lib/ux-each.js',
+                        'lib/ux-extend.js',
+                        'lib/ux-filter.js',
+                        'lib/ux-selector.js',//TODO: runner uses the query of selector. recorder uses the builder. maybe they should be broken out.
+                        'lib/storage/localStorageManager.js',
+                        'lib/data/_.js',
+                        'lib/data/diff.js',
+                        'shared/events.js',
+                        'shared/log.js',
+                        'shared/uidToPath.js',
+                        'client/recorder/simplify.js',
+                        'client/recorder/MousePath.js',
+                        'client/recorder/storageQueue.js',
+                        'client/recorder/configs/configUtils.js',
+                        'client/recorder/configs/runnerConfig.js',
+                        'client/recorder/recorder.js'
+                    ],
+                    '../public/capture/js/<%= pkg.packageName %>-<%= pkg.filename %>-recorder-capture.js': [
+                        'client/package.js',
+                        'client/recorder/const.js',
+                        'lib/ux-charPack.js',
+                        'lib/ux-dispatcher.js',
+                        'lib/ux-util-array.js',
+                        'lib/ux-each.js',
+                        'lib/ux-extend.js',
+                        'lib/ux-filter.js',
+                        'lib/ux-selector.js',//TODO: Not sure this one needs selector. Unless it is going to report what was clicked on with the selector.
+                        'lib/storage/localStorageManager.js',
+                        'lib/data/_.js',
+                        'lib/data/diff.js',
+                        'shared/events.js',
+                        'shared/log.js',
+                        'shared/uidToPath.js',
+                        'client/recorder/simplify.js',
+                        'client/recorder/MousePath.js',
+                        'client/recorder/storageQueue.js',
+                        'client/recorder/configs/configUtils.js',
+                        'client/recorder/configs/captureConfig.js',
+                        'client/recorder/recorder.js'
                     ]
                 }
             },
@@ -159,7 +207,7 @@ module.exports = function (grunt) {
                     debounceDelay: 1000
                 }
             }
-        }//,
+        },
 //        compress: {
 //            main: {
 //                options: {
@@ -170,15 +218,14 @@ module.exports = function (grunt) {
 //                dest: ''
 //            }
 //        },
-//        copy: {
-//            main: {
-//                files: [
-//                    // include files withing path
-//                    {expand: true, cwd: 'client/', src: ['client/index.html'], dest: '../public/client/index.html/'},
-//                    {expand: true, cwd: 'admin/', src: ['admin/index.html'], dest: '../public/admin/index.html/'}
-//                ]
-//            }
-//        }
+        copy: {
+            main: {
+                files: [
+                    // include files withing path
+                    {expand: true, cwd: '../public/client/js/', src: ['<%= pkg.packageName %>-<%= pkg.filename %>-recorder.js'], dest: '../public/tests/test1/js'}
+                ]
+            }
+        }
     });
 
 
@@ -192,6 +239,6 @@ module.exports = function (grunt) {
 
     // Default task(s).
 //    grunt.registerTask('default', ['jshint', 'uglify', 'compress']);
-    grunt.registerTask('default', ['jshint', 'uglify']);//, 'copy']);
+    grunt.registerTask('default', ['jshint', 'uglify', 'copy']);
 
 };
