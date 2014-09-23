@@ -1,1 +1,1 @@
-This is in pre-alpha and mainly consists of concepts for and debugger. This is not operational.
+This is in pre-alpha and mainly consists of concepts for a debugger. This is not operational.
